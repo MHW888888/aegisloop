@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible problem in AegisLoop
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Start bridge
+        2. Load extension
+        3. Click ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AegisLoop version
+      placeholder: "v0.1.0 / extension v2.3.1"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove secrets, real conversation ids, local paths, and tokens before pasting.
+      render: text

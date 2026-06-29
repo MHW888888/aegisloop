@@ -150,11 +150,16 @@ These files are local runtime state and are ignored by git:
 - `workspaces/`
 - backup folders
 
+## Community
+
+- Launch copy: [docs/launch-posts.md](docs/launch-posts.md)
+- Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
+- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ## Chinese / 中文说明
 
 **AegisLoop** 是一个把 ChatGPT 网页对话和本地 Codex session 连接起来的“有护栏自动循环”工具。
-
-它适合这种工作流：
+它适合这样的工作流：
 
 ```text
 ChatGPT 负责规划和复盘
@@ -162,10 +167,9 @@ Codex 负责本地读文件、改文件、跑检查
 AegisLoop 负责转发任务、回填结果、执行本地闸门
 ```
 
-### 它解决什么问题
+### 它解决什么问题？
 
-普通网页 ChatGPT 不能直接读你的本地项目，也不能可靠地持续驱动 Codex。Codex 能操作本地文件，但它需要明确的下一步任务。
-
+普通网页 ChatGPT 不能直接读取你的本地项目，也不能可靠地持续驱动 Codex。Codex 能操作本地文件，但它需要明确的下一步任务。
 AegisLoop 把两者接起来：
 
 1. ChatGPT 输出一个 `codex` 指令块。
@@ -176,18 +180,16 @@ AegisLoop 把两者接起来：
 
 ### 关键设计
 
-- **绑定关系本地配置**：ChatGPT 不能自己改 `codexSessionId` 或 `workspaceDir`。
+- **绑定关系本地配置**：ChatGPT 不能自己修改 `codexSessionId` 或 `workspaceDir`。
 - **本地安全闸门**：越界指令会被拦截。
 - **同目录串行执行**：两个线程写同一个项目时不会并发乱写。
 - **结果可审计**：每轮都有 JSONL 日志。
-- **停止需确认**：`<<<LOOP_STOP>>>` 会让循环暂停，而不是静默彻底终止。
+- **停止信号明确**：只有整条回复为 `<<<LOOP_STOP>>>` 时才停止。
 
 ### 同时跑多个线程
 
 可以同时打开多个 ChatGPT 页面。
-
-但如果它们都写同一个项目目录，AegisLoop 会自动排队，保证同一时间只有一个 Codex 写入该目录。
-
+如果它们都写同一个项目目录，AegisLoop 会自动排队，保证同一时间只有一个 Codex 写入该目录。
 如果你想真正并行，请给每条线单独的 git worktree 或项目副本。
 
 ## Roadmap
