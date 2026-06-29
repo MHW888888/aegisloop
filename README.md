@@ -1,50 +1,96 @@
 # AegisLoop
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Node check](https://github.com/MHW888888/aegisloop/actions/workflows/check.yml/badge.svg)](https://github.com/MHW888888/aegisloop/actions/workflows/check.yml)
+[![Local-first](https://img.shields.io/badge/local--first-yes-blue)](#safety-model)
+[![Guarded autonomy](https://img.shields.io/badge/guarded-autonomy-purple)](#why-aegisloop)
+
 > **A guarded autonomy bridge for ChatGPT and local Codex.**
 
-AegisLoop turns a ChatGPT web conversation into a bounded local engineering loop:
-ChatGPT plans, Codex executes locally, AegisLoop carries results back, and local gates decide what is allowed to continue.
+AegisLoop lets ChatGPT plan and review while local Codex executes in your real workspace. It turns a web conversation into a bounded engineering loop with local gates, workspace locks, dedupe, and audit logs.
 
-It is built for people who want autonomous coding/research loops without handing the steering wheel to an unbounded web chat.
+It is for people who want agentic workflows without handing the steering wheel to an unbounded web chat.
 
 > AegisLoop is a personal automation bridge. It is not an official OpenAI product.
 
-## Why It Exists
+![AegisLoop architecture](docs/architecture.svg)
 
-Large language models are good at planning the next step. Local coding agents are good at touching real files, running checks, and reporting concrete results. AegisLoop connects those two roles while keeping the dangerous parts local and inspectable.
+## Why AegisLoop
 
-```mermaid
-flowchart LR
-  A["ChatGPT planner"] -->|"fenced codex task"| B["AegisLoop Chrome extension"]
-  B --> C["Local AegisLoop bridge"]
-  C -->|"codex exec resume"| D["Local Codex session"]
-  D -->|"structured result"| C
-  C --> B
-  B -->|"insert result"| A
-  C --> E["Gate / dedupe / workspace lock / audit log"]
+ChatGPT is good at planning, critique, and next-step design. Codex is good at reading real files, making local changes, and running checks. AegisLoop connects them with a local control plane:
+
+- ChatGPT emits exactly one fenced `codex` task.
+- A local bridge dispatches that task to a bound Codex session.
+- Codex runs locally in the configured workspace.
+- The result is inserted back into ChatGPT.
+- ChatGPT reviews and emits the next step.
+
+The important part is not the loop itself. The important part is the **aegis** around it: gates, locks, dedupe, and logs.
+
+## What Makes It Different
+
+| Problem | AegisLoop answer |
+| --- | --- |
+| ChatGPT cannot safely choose arbitrary local sessions | Bindings live in local `config.json`; web content cannot override them. |
+| Web automation can loop forever | Missing `codex` blocks trigger bounded reformat nudges, then pause. |
+| Two agents can corrupt one workspace | Same `workspaceDir` is serialized with a workspace lock. |
+| Repeated model output can rerun the same task | Normalized content hash dedupe blocks repeated payloads. |
+| Research workflows need hard boundaries | Local denylist gates block risky payloads before Codex runs. |
+| Post-hoc debugging is painful | Every turn is written to JSONL audit logs. |
+
+## Quick Start
+
+### 1. Clone
+
+```powershell
+git clone https://github.com/MHW888888/aegisloop.git
+cd aegisloop
 ```
 
-## Highlights
+### 2. Configure
 
-- **Conversation-bound execution**  
-  Each ChatGPT conversation is bound to one local Codex session and one workspace.
+```powershell
+Copy-Item .\config.example.json .\config.json
+```
 
-- **Local-first control plane**  
-  The bridge listens on `127.0.0.1`; ChatGPT cannot override session or workspace bindings.
+Edit `config.json`:
 
-- **Guarded autonomy**  
-  Local denylist gates can block production signals, scoring approval, trading advice, git writes, real-money actions, price predictions, and other risky payloads.
+- `conversationId`: id from the ChatGPT URL.
+- `codexSessionId`: local Codex session id to resume.
+- `workspaceDir`: local workspace for that session.
+- `codex.bin` / `codex.args`: Node.js and Codex CLI paths.
 
-- **Bounded recovery**  
-  If ChatGPT forgets to emit a `codex` block, AegisLoop nudges it back to the protocol a limited number of times, then pauses.
+### 3. Start The Bridge
 
-- **Workspace lock**  
-  Multiple conversations can be open, but writes to the same workspace are serialized to avoid corrupted files and git state.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\launch.ps1
+```
 
-- **Audit trail**  
-  Every dispatch, gate, result, and stop event is written to JSONL.
+Check health:
 
-## How The Loop Works
+```powershell
+Invoke-RestMethod http://127.0.0.1:17380/health
+```
+
+### 4. Load The Chrome Extension
+
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select `chrome-extension/`.
+5. Open the bound ChatGPT conversation and press `Ctrl+F5`.
+
+### 5. Run
+
+If the page already contains a valid `codex` block, click:
+
+```text
+Run current codex / start
+```
+
+If there is no usable `codex` block yet, type the first task in the AegisLoop panel and start the loop.
+
+## The Protocol
 
 ChatGPT must end each actionable reply with exactly one fenced `codex` block:
 
@@ -60,82 +106,30 @@ Or, if the loop should stop:
 <<<LOOP_STOP>>>
 ```
 
-AegisLoop reads that block, sends the prompt to the bound local Codex session, waits for the result, inserts it back into ChatGPT, and repeats.
+AegisLoop treats `<<<LOOP_STOP>>>` as a stop signal only when it is the whole assistant reply.
 
-## Installation
+## Safety Model
 
-### 1. Clone or copy the project
+AegisLoop does not trust web content to decide local authority.
 
-```powershell
-git clone https://github.com/YOUR_USER/aegisloop.git
-cd aegisloop
-```
+The bridge can block payloads that appear to request:
 
-### 2. Create your local config
+- production signals
+- scoring approval
+- alpha evidence promotion
+- trading advice or BUY/WATCH/AVOID style signals
+- real-money orders
+- price predictions
+- git commit/push/merge/add
+- weight changes
 
-```powershell
-Copy-Item .\config.example.json .\config.json
-```
-
-Edit `config.json`:
-
-- `conversationId`: the id from your ChatGPT URL.
-- `codexSessionId`: the local Codex session id to resume.
-- `workspaceDir`: the local workspace for that session.
-- `codex.bin` / `codex.args`: your local Node.js and Codex CLI paths.
-
-### 3. Start the bridge
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\launch.ps1
-```
-
-Check:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:17380/health
-```
-
-### 4. Load the Chrome extension
-
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Select `chrome-extension/`.
-
-### 5. Start a loop
-
-Open the bound ChatGPT conversation and press `Ctrl+F5`.
-
-If the page already contains a valid `codex` block, click:
-
-```text
-Run current codex / start
-```
-
-If the page has no usable `codex` block yet, type the first task in the AegisLoop panel and start the loop.
-
-## Configuration Notes
-
-`config.json` is local-only and must not be committed.
-
-Important fields:
+You can intentionally auto-approve selected low-risk gate rules:
 
 ```json
-{
-  "bindings": [
-    {
-      "conversationId": "YOUR_CHATGPT_CONVERSATION_ID",
-      "codexSessionId": "YOUR_CODEX_SESSION_ID",
-      "workspaceDir": "C:\\path\\to\\workspace",
-      "fullAuto": true
-    }
-  ],
-  "autoApproveGateRules": ["approved_for_scoring"]
-}
+"autoApproveGateRules": ["approved_for_scoring"]
 ```
 
-`autoApproveGateRules` is optional. Use it only for gates you intentionally want to bypass locally.
+Use this carefully. The default design is research-first and fail-closed.
 
 ## Parallel Runs
 
@@ -147,7 +141,7 @@ For true parallelism, use separate git worktrees or separate workspace copies.
 
 ## Runtime Files
 
-The following files are local runtime state and are ignored by git:
+These files are local runtime state and are ignored by git:
 
 - `config.json`
 - `state.json`
@@ -156,22 +150,21 @@ The following files are local runtime state and are ignored by git:
 - `workspaces/`
 - backup folders
 
-## 中文说明
+## Chinese / 中文说明
 
 **AegisLoop** 是一个把 ChatGPT 网页对话和本地 Codex session 连接起来的“有护栏自动循环”工具。
 
-它适合这样的工作流：
+它适合这种工作流：
 
 ```text
-ChatGPT 负责规划下一步
-Codex 负责本地读文件 / 改文件 / 跑检查
+ChatGPT 负责规划和复盘
+Codex 负责本地读文件、改文件、跑检查
 AegisLoop 负责转发任务、回填结果、执行本地闸门
 ```
 
 ### 它解决什么问题
 
-普通网页 ChatGPT 不能直接读你的本地项目，也不能可靠地持续驱动 Codex。  
-Codex 能操作本地文件，但它需要明确的下一步任务。
+普通网页 ChatGPT 不能直接读你的本地项目，也不能可靠地持续驱动 Codex。Codex 能操作本地文件，但它需要明确的下一步任务。
 
 AegisLoop 把两者接起来：
 
@@ -189,38 +182,20 @@ AegisLoop 把两者接起来：
 - **结果可审计**：每轮都有 JSONL 日志。
 - **停止需确认**：`<<<LOOP_STOP>>>` 会让循环暂停，而不是静默彻底终止。
 
-### 使用步骤
+### 同时跑多个线程
 
-1. 复制配置：
+可以同时打开多个 ChatGPT 页面。
 
-```powershell
-Copy-Item .\config.example.json .\config.json
-```
-
-2. 修改 `config.json`，填入你的 ChatGPT conversation、Codex session、本地项目目录。
-
-3. 启动 bridge：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\launch.ps1
-```
-
-4. Chrome 加载 `chrome-extension/`。
-
-5. 打开对应 ChatGPT 页面，按 `Ctrl+F5`。
-
-6. 页面上已有 `codex` 块时，点击：
-
-```text
-Run current codex / start
-```
-
-### 关于同时跑多个线程
-
-可以同时打开多个 ChatGPT 页面。  
 但如果它们都写同一个项目目录，AegisLoop 会自动排队，保证同一时间只有一个 Codex 写入该目录。
 
 如果你想真正并行，请给每条线单独的 git worktree 或项目副本。
+
+## Roadmap
+
+- Browser DOM selector hardening across ChatGPT UI variants.
+- Optional repo-level branch/worktree manager.
+- Local dashboard for queue, locks, and audit replay.
+- Safer release packaging for the Chrome extension.
 
 ## License
 
