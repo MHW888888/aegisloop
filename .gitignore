@@ -1,0 +1,11 @@
+config.json
+state.json
+state.json.tmp
+logs/
+data/
+workspaces/
+backup-before-*/
+chrome-extension/content.before-*.js
+*.log
+*.tmp
+node_modules/

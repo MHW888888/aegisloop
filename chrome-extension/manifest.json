@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "AegisLoop",
+  "version": "2.3.1",
+  "description": "A guarded ChatGPT-to-Codex automation bridge for bounded local engineering loops.",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "http://127.0.0.1:17380/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

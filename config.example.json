@@ -1,0 +1,71 @@
+{
+  "port": 17380,
+  "contractVersion": "le-2.2",
+  "bindings": [
+    {
+      "conversationId": "YOUR_CHATGPT_CONVERSATION_ID",
+      "codexSessionId": "YOUR_CODEX_SESSION_ID",
+      "workspaceDir": "C:\\path\\to\\your\\workspace",
+      "fullAuto": true
+    }
+  ],
+  "codex": {
+    "bin": "C:\\Program Files\\nodejs\\node.exe",
+    "args": [
+      "C:\\Users\\YOUR_USER\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js",
+      "exec",
+      "resume"
+    ],
+    "stdinFlag": "-",
+    "timeoutMs": 1800000
+  },
+  "breaker": {
+    "maxConsecutiveFailures": 4
+  },
+  "minIntervalMs": 1500,
+  "maxResultChars": 12000,
+  "feishuWebhook": "",
+  "autoApproveGateRules": ["approved_for_scoring"],
+  "denylist": [
+    {
+      "name": "production_signal",
+      "pattern": "production[_\\s-]?signal\\s*[:=]\\s*(true|on)|(\\u63a5\\u5165|\\u4e0a\\u7ebf|\\u542f\\u7528|\\u5f00\\u542f)\\u751f\\u4ea7\\u4fe1\\u53f7"
+    },
+    {
+      "name": "approved_for_scoring",
+      "pattern": "approved[_\\s-]?for[_\\s-]?scoring\\s*[:=]\\s*true"
+    },
+    {
+      "name": "alpha_evidence",
+      "pattern": "alpha[_\\s-]?evidence\\s*[:=]\\s*true"
+    },
+    {
+      "name": "git_write",
+      "pattern": "(^|[;\\n])\\s*git\\s+(commit|push|merge)\\b|(^|[;\\n])\\s*git\\s+add\\s+\\."
+    },
+    {
+      "name": "real_money",
+      "pattern": "\\u5b9e\\u76d8\\u4e0b\\u5355|\\u771f\\u5b9e\\u4e0b\\u5355|\\u771f\\u5b9e\\u8d44\\u91d1|\\u5b9e\\u76d8\\u4ea4\\u6613|place\\s+order|\\u4e0b\\u5355\\s*\\d+\\s*\\u80a1"
+    },
+    {
+      "name": "weight_assign",
+      "pattern": "\\u6743\\u91cd\\s*(\\u6539\\u4e3a|\\u8bbe\\u4e3a|\\u8c03\\u6574\\u4e3a|=|:)\\s*[\\d.]|reweight\\b|change\\s+weights\\s*[:=]"
+    },
+    {
+      "name": "price_emit",
+      "pattern": "\\u76ee\\u6807\\u4ef7\\s*[:=]?\\s*[\\d.]|(\\u9884\\u6d4b|\\u9884\\u8ba1)[^\\n]{0,8}(\\u6da8\\u505c|\\u8dcc\\u505c|\\u6da8\\u5e45\\s*\\d|\\d+\\s*%)"
+    },
+    {
+      "name": "signal_emit",
+      "pattern": "(signal|rating|recommendation|action|\\u8bc4\\u7ea7|\\u6295\\u8d44\\u5efa\\u8bae|\\u64cd\\u4f5c\\u5efa\\u8bae|\\u4ea4\\u6613\\u4fe1\\u53f7)\"?\\s*[:=]\\s*\"?\\s*(BUY|WATCH|AVOID|SELL|HOLD|\\u4e70\\u5165|\\u5356\\u51fa|\\u589e\\u6301|\\u51cf\\u6301|\\u5f3a\\u70c8\\u63a8\\u8350|\\u5efa\\u4ed3|\\u6e05\\u4ed3)"
+    },
+    {
+      "name": "ticker_signal",
+      "pattern": "\\b\\d{6}(\\.(SH|SZ|BJ))?\\b[^\\n]{0,16}?(BUY|WATCH|AVOID|SELL|\\u4e70\\u5165|\\u5356\\u51fa|\\u6da8\\u505c)"
+    },
+    {
+      "name": "named_pick_emit",
+      "pattern": "(\\u63a8\\u8350|\\u7cbe\\u9009|\\u9996\\u9009|\\u5f3a\\u63a8|\\u91d1\\u80a1)\\s*[:\\uff1a]?\\s*(\\u4e2a\\u80a1|\\u80a1\\u7968|\\u6807\\u7684|\\u540d\\u5355|\\u80a1\\u7968\\u6c60)"
+    }
+  ]
+}

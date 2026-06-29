@@ -1,0 +1,20 @@
+{
+  "name": "aegisloop",
+  "version": "2.3.1",
+  "private": false,
+  "description": "A guarded ChatGPT-to-Codex automation bridge for bounded local engineering loops.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "check": "node --check server.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js"
+  },
+  "keywords": [
+    "codex",
+    "chatgpt",
+    "automation",
+    "local-first",
+    "chrome-extension",
+    "agentic-workflow"
+  ],
+  "license": "MIT"
+}
