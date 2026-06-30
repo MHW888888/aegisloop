@@ -18,6 +18,16 @@ This release makes it easier to understand and try: clearer README positioning, 
 
 GitHub: https://github.com/MHW888888/aegisloop
 
+## English v0.3.0 Parallel Safe Mode Post
+
+AegisLoop v0.3.0 adds Parallel Safe Mode.
+
+The problem: two ChatGPT conversations can be separated by conversation id, but still collide semantically if they read the same project and use the same stage names.
+
+Run Capsules add `projectId`, `activeBranch`, `runId`, and an external write root. In readonly mode, Codex runs from that external root while treating the source project as read-only context.
+
+GitHub: https://github.com/MHW888888/aegisloop
+
 ## English Longer Post
 
 I built AegisLoop because I wanted a safer way to run ChatGPT x Codex loops.
@@ -50,6 +60,16 @@ AegisLoop v0.2.0 发了，这版重点不是堆复杂功能，而是做“亲民
 它还是那个核心思路：ChatGPT 负责规划，本地 Codex 负责执行，中间由本地 bridge 加安全闸门、工作区锁、去重和审计日志。
 
 这版主要改了 README 首屏表达、扩展面板文案、首次运行指南和排错文档，让第一次看到的人更容易理解，也更敢上手。
+
+GitHub: https://github.com/MHW888888/aegisloop
+
+## 中文 v0.3.0 Parallel Safe Mode 版
+
+AegisLoop v0.3.0 加了 Parallel Safe Mode。
+
+之前的问题是：两个 ChatGPT 对话虽然传输层按 conversation id 分开，但如果读同一个项目目录、阶段名又都叫 F8/F9，就会在项目语义层撞车。
+
+Run Capsule 会给每个线程加上 `projectId`、`activeBranch`、`runId` 和外部写入目录。readonly 模式下，Codex 从外部 runtime 目录执行，把原项目当只读上下文，降低多线程跑串线的风险。
 
 GitHub: https://github.com/MHW888888/aegisloop
 

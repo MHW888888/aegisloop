@@ -54,6 +54,7 @@ The important part is not the loop itself. The important part is the **aegis** a
 | ChatGPT cannot safely choose arbitrary local sessions | Bindings live in local `config.json`; web content cannot override them. |
 | Web automation can loop forever | Missing `codex` blocks trigger bounded reformat nudges, then pause. |
 | Two agents can corrupt one workspace | Same `workspaceDir` is serialized with a workspace lock. |
+| Two research branches use the same stage names | Optional Run Capsules add `projectId`, `activeBranch`, `runId`, and an external write root. |
 | Repeated model output can rerun the same task | Normalized content hash dedupe blocks repeated payloads. |
 | Research workflows need hard boundaries | Local denylist gates block risky payloads before Codex runs. |
 | Post-hoc debugging is painful | Every turn is written to JSONL audit logs. |
@@ -161,6 +162,8 @@ The bridge can block payloads that appear to request:
 - git commit/push/merge/add
 - weight changes
 
+For parallel research runs, Run Capsules can also block ambiguous stage labels unless the prompt includes the configured `activeBranch`.
+
 You can intentionally auto-approve selected low-risk gate rules:
 
 ```json
@@ -176,6 +179,10 @@ You can bind multiple ChatGPT conversations.
 If two conversations share the same `workspaceDir`, AegisLoop runs Codex jobs one at a time for that workspace. This is deliberate. It prevents concurrent writes from damaging files or git state.
 
 For true parallelism, use separate git worktrees or separate workspace copies.
+
+For safer multi-thread research runs, enable **Parallel Safe Mode** with a Run Capsule. It adds `projectId`, `activeBranch`, `runId`, and an external write root so two conversations can read the same source project without mixing branch context or output artifacts.
+
+See [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md).
 
 ## Runtime Files
 
@@ -194,6 +201,7 @@ These files are local runtime state and are ignored by git:
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - First-run guide: [docs/first-run.md](docs/first-run.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
+- Parallel Safe Mode: [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Chinese / 中文说明

@@ -33,6 +33,7 @@ function readJson(file) {
 
 function loadConfig() {
   const config = readJson(CONFIG_PATH);
+  config.runtimeRoot = config.runtimeRoot || path.join(ROOT, 'runs');
   config.denylistCompiled = (config.denylist || []).map(rule => ({
     name: rule.name,
     re: new RegExp(rule.pattern, rule.flags || 'i'),
@@ -42,6 +43,43 @@ function loadConfig() {
 
 let CONFIG = loadConfig();
 const PORT = CONFIG.port || 17380;
+
+function safeSegment(value, fallback) {
+  return String(value || fallback || 'default')
+    .trim()
+    .replace(/[^a-z0-9._-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96) || fallback || 'default';
+}
+
+function isPathInside(child, parent) {
+  const rel = path.relative(path.resolve(parent), path.resolve(child));
+  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function buildCapsule(binding) {
+  const raw = binding.capsule;
+  if (!raw || raw.enabled === false) return null;
+
+  const projectId = safeSegment(raw.projectId, 'default-project');
+  const activeBranch = safeSegment(raw.activeBranch, 'main');
+  const runId = safeSegment(raw.runId, 'run-' + safeSegment(binding.conversationId, 'conversation').slice(0, 8));
+  const runtimeRoot = path.resolve(raw.runtimeRoot || CONFIG.runtimeRoot);
+  const allowedWriteRoot = path.resolve(raw.allowedWriteRoot || path.join(runtimeRoot, 'runs', projectId, activeBranch, runId));
+
+  return {
+    enabled: true,
+    projectId,
+    activeBranch,
+    branchMeaning: String(raw.branchMeaning || ''),
+    runId,
+    mode: raw.mode || 'readonly',
+    runtimeRoot,
+    allowedWriteRoot,
+    stageNamespaceRequired: raw.stageNamespaceRequired !== false,
+    forbiddenBranchContext: Array.isArray(raw.forbiddenBranchContext) ? raw.forbiddenBranchContext.map(String) : [],
+  };
+}
 
 function defaultConversation(binding) {
   return {
@@ -59,6 +97,7 @@ function defaultConversation(binding) {
     blockedPayload: null,
     activeDispatchHash: null,
     lastDispatchAt: 0,
+    capsule: buildCapsule(binding),
     updatedAt: Date.now(),
   };
 }
@@ -81,6 +120,7 @@ function loadState() {
     }
     existing.codexSessionId = binding.codexSessionId;
     existing.workspaceDir = binding.workspaceDir;
+    existing.capsule = buildCapsule(binding);
     if (typeof binding.fullAuto === 'boolean') existing.fullAuto = binding.fullAuto;
   }
 }
@@ -152,6 +192,102 @@ function hashPayload(prompt) {
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 }
 
+function ensureCapsuleRuntime(conversation) {
+  const capsule = conversation.capsule;
+  if (!capsule || !capsule.enabled) return null;
+  fs.mkdirSync(capsule.allowedWriteRoot, { recursive: true });
+  fs.mkdirSync(path.join(capsule.allowedWriteRoot, 'inbox'), { recursive: true });
+  fs.mkdirSync(path.join(capsule.allowedWriteRoot, 'outbox'), { recursive: true });
+  fs.mkdirSync(path.join(capsule.allowedWriteRoot, 'patches'), { recursive: true });
+  fs.writeFileSync(path.join(capsule.allowedWriteRoot, 'capsule.json'), JSON.stringify({
+    projectId: capsule.projectId,
+    activeBranch: capsule.activeBranch,
+    branchMeaning: capsule.branchMeaning,
+    runId: capsule.runId,
+    mode: capsule.mode,
+    sourceDir: conversation.workspaceDir,
+    allowedWriteRoot: capsule.allowedWriteRoot,
+    forbiddenWritePaths: [
+      conversation.workspaceDir,
+      path.join(conversation.workspaceDir, 'outputs'),
+    ],
+    forbiddenBranchContext: capsule.forbiddenBranchContext,
+    stageNamespaceRequired: capsule.stageNamespaceRequired,
+    updatedAt: new Date().toISOString(),
+  }, null, 2));
+  return capsule.allowedWriteRoot;
+}
+
+function buildCapsuleHeader(conversation) {
+  const capsule = conversation.capsule;
+  if (!capsule || !capsule.enabled) return '';
+
+  const forbidden = [
+    conversation.workspaceDir,
+    path.join(conversation.workspaceDir, 'outputs'),
+  ].map(p => '- ' + p).join('\n');
+  const forbiddenBranches = capsule.forbiddenBranchContext.length
+    ? capsule.forbiddenBranchContext.map(v => '- ' + v).join('\n')
+    : '- (none)';
+
+  return [
+    '[AegisLoop Run Capsule]',
+    `project_id: ${capsule.projectId}`,
+    `run_id: ${capsule.runId}`,
+    `active_branch: ${capsule.activeBranch}`,
+    `branch_meaning: ${capsule.branchMeaning || '(not provided)'}`,
+    `mode: ${capsule.mode}`,
+    `source_dir: ${conversation.workspaceDir}`,
+    `allowed_write_root: ${capsule.allowedWriteRoot}`,
+    'forbidden_write_paths:',
+    forbidden,
+    'forbidden_branch_context:',
+    forbiddenBranches,
+    `stage_namespace_required: ${capsule.stageNamespaceRequired ? 'true' : 'false'}`,
+    '',
+    'Rules:',
+    '1. Do not write to source_dir or forbidden_write_paths.',
+    '2. Write all artifacts only under allowed_write_root.',
+    '3. Do not use files from forbidden_branch_context as accepted prerequisites.',
+    '4. If a stage label is ambiguous, stop and ask for branch clarification.',
+    '5. End with a machine-readable summary containing project_id, active_branch, stage_id, input_hash, output_files, and next_candidate.',
+    '[/AegisLoop Run Capsule]',
+    '',
+  ].join('\n');
+}
+
+function decoratePrompt(conversation, prompt) {
+  if (String(prompt).startsWith('[AegisLoop Run Capsule]')) return String(prompt);
+  const header = buildCapsuleHeader(conversation);
+  return header ? header + String(prompt) : String(prompt);
+}
+
+function capsuleCheck(conversation, prompt) {
+  const capsule = conversation.capsule;
+  if (!capsule || !capsule.enabled) return { ok: true };
+
+  if (!isPathInside(capsule.allowedWriteRoot, capsule.runtimeRoot)) {
+    return { ok: false, rule: 'capsule_write_root_outside_runtime' };
+  }
+
+  if (capsule.stageNamespaceRequired && capsule.activeBranch) {
+    const text = String(prompt);
+    const hasBranch = text.includes(capsule.activeBranch);
+    const hasStage = /\b(?:V\d+(?:\.\d+)*[A-Z]?(?:\.\d+[A-Z]?)?|F\d+[A-Z]?)\b/i.test(text);
+    if (hasStage && !hasBranch) {
+      return { ok: false, rule: 'ambiguous_stage_without_active_branch' };
+    }
+  }
+
+  for (const otherBranch of capsule.forbiddenBranchContext) {
+    if (otherBranch && String(prompt).includes(otherBranch)) {
+      return { ok: false, rule: 'forbidden_branch_context' };
+    }
+  }
+
+  return { ok: true };
+}
+
 const workspaceLocks = new Map();
 
 function withWorkspaceLock(dir, fn) {
@@ -168,6 +304,13 @@ function withWorkspaceLock(dir, fn) {
       release();
       if (workspaceLocks.get(key) === chain) workspaceLocks.delete(key);
     });
+}
+
+function lockDirForConversation(conversation) {
+  if (conversation.capsule && conversation.capsule.enabled && conversation.capsule.mode === 'readonly') {
+    return conversation.capsule.allowedWriteRoot;
+  }
+  return conversation.workspaceDir;
 }
 
 function classifyFailure(code, stderr, stdout) {
@@ -209,8 +352,11 @@ function runCodexOnce(conversation, prompt) {
     }, codex.timeoutMs || 1800000);
 
     try {
+      const cwd = conversation.capsule && conversation.capsule.enabled && conversation.capsule.mode === 'readonly'
+        ? ensureCapsuleRuntime(conversation)
+        : conversation.workspaceDir;
       child = spawn(codex.bin, args, {
-        cwd: conversation.workspaceDir,
+        cwd,
         windowsHide: true,
         env: process.env,
       });
@@ -266,13 +412,34 @@ function prepareDispatch(conversation, prompt) {
     return { status: 'busy', hash: conversation.activeDispatchHash };
   }
 
-  const hash = hashPayload(prompt);
+  const capsuleGate = capsuleCheck(conversation, prompt);
+  if (!capsuleGate.ok) {
+    conversation.loopState = 'paused';
+    conversation.pauseReason = 'gate:' + capsuleGate.rule;
+    conversation.blockedPayload = {
+      prompt,
+      hash: hashPayload(prompt),
+      rule: capsuleGate.rule,
+    };
+    conversation.updatedAt = Date.now();
+    saveState();
+    audit(conversation.conversationId, {
+      type: 'capsule_blocked',
+      rule: capsuleGate.rule,
+      prompt,
+      capsule: conversation.capsule,
+    });
+    return { status: 'blocked', rule: capsuleGate.rule };
+  }
+
+  const effectivePrompt = decoratePrompt(conversation, prompt);
+  const hash = hashPayload(effectivePrompt);
   if (conversation.executedHashes.includes(hash)) {
     audit(conversation.conversationId, { type: 'duplicate_payload', hash });
     return { status: 'duplicate', hash };
   }
 
-  const gate = gateCheck(prompt);
+  const gate = gateCheck(effectivePrompt);
   if (!gate.ok) {
     const autoRules = Array.isArray(CONFIG.autoApproveGateRules)
       ? CONFIG.autoApproveGateRules
@@ -283,10 +450,10 @@ function prepareDispatch(conversation, prompt) {
     } else {
       conversation.loopState = 'paused';
       conversation.pauseReason = 'gate:' + gate.rule;
-      conversation.blockedPayload = { prompt, hash, rule: gate.rule };
+      conversation.blockedPayload = { prompt: effectivePrompt, hash, rule: gate.rule };
       conversation.updatedAt = Date.now();
       saveState();
-      audit(conversation.conversationId, { type: 'gate_blocked', rule: gate.rule, hash, prompt });
+      audit(conversation.conversationId, { type: 'gate_blocked', rule: gate.rule, hash, prompt: effectivePrompt });
       notify(`conversation ${conversation.conversationId.slice(0, 8)} blocked by gate ${gate.rule}`);
       return { status: 'blocked', rule: gate.rule, hash };
     }
@@ -298,7 +465,8 @@ function prepareDispatch(conversation, prompt) {
     conversation.executedHashes.splice(0, conversation.executedHashes.length - 500);
   }
   saveState();
-  return { status: 'accepted', hash };
+  ensureCapsuleRuntime(conversation);
+  return { status: 'accepted', hash, prompt: effectivePrompt };
 }
 
 async function runDispatchAsync(conversation, prompt, hash) {
@@ -312,9 +480,15 @@ async function runDispatchAsync(conversation, prompt, hash) {
     conversation.turn += 1;
     conversation.lastDispatchAt = Date.now();
     const turn = conversation.turn;
-    audit(conversation.conversationId, { type: 'dispatch', turn, hash, prompt });
+    audit(conversation.conversationId, {
+      type: 'dispatch',
+      turn,
+      hash,
+      prompt,
+      capsule: conversation.capsule || null,
+    });
 
-    const result = await withWorkspaceLock(conversation.workspaceDir, async () => {
+    const result = await withWorkspaceLock(lockDirForConversation(conversation), async () => {
       let first = await runCodexOnce(conversation, prompt);
       if (!first.ok && first.errorClass === 'infra') {
         audit(conversation.conversationId, { type: 'codex_retry_infra', turn, code: first.code });
@@ -388,18 +562,19 @@ async function runDispatchAsync(conversation, prompt, hash) {
 }
 
 async function forceExecute(conversation, prompt) {
-  const hash = hashPayload(prompt);
+  const effectivePrompt = decoratePrompt(conversation, prompt);
+  const hash = hashPayload(effectivePrompt);
   conversation.activeDispatchHash = hash;
   conversation.updatedAt = Date.now();
   saveState();
 
   conversation.turn += 1;
   const turn = conversation.turn;
-  audit(conversation.conversationId, { type: 'forced_dispatch', turn, hash });
+  audit(conversation.conversationId, { type: 'forced_dispatch', turn, hash, capsule: conversation.capsule || null });
 
-  const result = await withWorkspaceLock(conversation.workspaceDir, async () => {
-    let first = await runCodexOnce(conversation, prompt);
-    if (!first.ok && first.errorClass === 'infra') first = await runCodexOnce(conversation, prompt);
+  const result = await withWorkspaceLock(lockDirForConversation(conversation), async () => {
+    let first = await runCodexOnce(conversation, effectivePrompt);
+    if (!first.ok && first.errorClass === 'infra') first = await runCodexOnce(conversation, effectivePrompt);
     return first;
   });
 
@@ -479,6 +654,7 @@ const server = http.createServer(async (request, response) => {
           activeDispatchHash: c.activeDispatchHash || null,
           hasPendingResult: !!(c.pendingResult && !c.pendingResult.consumed),
           blockedPayload: c.blockedPayload,
+          capsule: c.capsule || null,
         })),
       });
     }
@@ -508,6 +684,7 @@ const server = http.createServer(async (request, response) => {
         conversationId: conversation.conversationId,
         codexSessionId: conversation.codexSessionId,
         workspaceDir: conversation.workspaceDir,
+        capsule: conversation.capsule || null,
         fullAuto: conversation.fullAuto,
         loopState: conversation.loopState,
         contractVersion: CONFIG.contractVersion,
@@ -524,7 +701,7 @@ const server = http.createServer(async (request, response) => {
 
       const prepared = prepareDispatch(conversation, body.prompt);
       if (prepared.status === 'accepted') {
-        runDispatchAsync(conversation, body.prompt, prepared.hash);
+        runDispatchAsync(conversation, prepared.prompt, prepared.hash);
       }
       return sendJson(response, 200, prepared);
     }

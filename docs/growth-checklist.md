@@ -11,6 +11,7 @@ Use this as a lightweight launch plan. The goal is not spam. The goal is to make
 - GitHub Actions syntax check
 - Release `v0.1.0`
 - Lite release `v0.2.0`
+- Parallel Safe Mode release `v0.3.0`
 - Topics for discoverability
 - Launch post drafts
 - Issue and PR templates

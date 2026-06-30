@@ -1,12 +1,23 @@
 {
   "port": 17380,
-  "contractVersion": "le-2.2",
+  "contractVersion": "le-2.3",
+  "runtimeRoot": "C:\\AegisLoopRuntime",
   "bindings": [
     {
       "conversationId": "YOUR_CHATGPT_CONVERSATION_ID",
       "codexSessionId": "YOUR_CODEX_SESSION_ID",
       "workspaceDir": "C:\\path\\to\\your\\workspace",
-      "fullAuto": true
+      "fullAuto": true,
+      "capsule": {
+        "enabled": false,
+        "projectId": "my-project",
+        "activeBranch": "V1-SAFE",
+        "branchMeaning": "short description of this run line",
+        "runId": "run-001",
+        "mode": "readonly",
+        "stageNamespaceRequired": true,
+        "forbiddenBranchContext": ["V1-OTHER"]
+      }
     }
   ],
   "codex": {
