@@ -1,8 +1,8 @@
 {
   "name": "aegisloop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
-  "description": "A guarded ChatGPT-to-Codex automation bridge for bounded local engineering loops.",
+  "description": "A simpler guarded bridge where ChatGPT plans and local Codex executes safely.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

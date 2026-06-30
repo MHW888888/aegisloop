@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AegisLoop",
-  "version": "2.3.1",
-  "description": "A guarded ChatGPT-to-Codex automation bridge for bounded local engineering loops.",
+  "version": "2.4.0",
+  "description": "Let ChatGPT plan while local Codex executes through a guarded bridge.",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
     "https://chatgpt.com/*",

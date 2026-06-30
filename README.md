@@ -5,15 +5,26 @@
 [![Local-first](https://img.shields.io/badge/local--first-yes-blue)](#safety-model)
 [![Guarded autonomy](https://img.shields.io/badge/guarded-autonomy-purple)](#why-aegisloop)
 
-> **A guarded autonomy bridge for ChatGPT and local Codex.**
+> **Let ChatGPT plan a coding task while your local Codex executes it safely, one step at a time.**
 
-AegisLoop lets ChatGPT plan and review while local Codex executes in your real workspace. It turns a web conversation into a bounded engineering loop with local gates, workspace locks, dedupe, and audit logs.
+AegisLoop connects a ChatGPT web conversation to a local Codex session. ChatGPT decides the next step, Codex runs it in your workspace, and AegisLoop carries the result back with local safety gates, workspace locks, dedupe, and audit logs.
 
-It is for people who want agentic workflows without handing the steering wheel to an unbounded web chat.
+It is for people who want useful agentic loops without handing the steering wheel to an unbounded web chat.
 
 > AegisLoop is a personal automation bridge. It is not an official OpenAI product.
 
 ![AegisLoop architecture](docs/architecture.svg)
+
+## AegisLoop Lite
+
+Version `v0.2.0` focuses on first-run clarity:
+
+- friendlier extension labels;
+- a shorter setup path;
+- beginner docs for common failures;
+- clearer README positioning.
+
+The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
 
 ## Why AegisLoop
 
@@ -27,6 +38,15 @@ ChatGPT is good at planning, critique, and next-step design. Codex is good at re
 
 The important part is not the loop itself. The important part is the **aegis** around it: gates, locks, dedupe, and logs.
 
+## Who It Is For
+
+| You are... | AegisLoop helps by... |
+| --- | --- |
+| using ChatGPT to plan multi-step coding work | avoiding repetitive copy/paste between ChatGPT and Codex |
+| cautious about agents running local commands | adding pause, approval gates, workspace locks, and audit logs |
+| running long engineering or research loops | returning each Codex result to ChatGPT for review |
+| happy with the ChatGPT web UI | keeping ChatGPT as the planner instead of forcing a new IDE |
+
 ## What Makes It Different
 
 | Problem | AegisLoop answer |
@@ -38,7 +58,25 @@ The important part is not the loop itself. The important part is the **aegis** a
 | Research workflows need hard boundaries | Local denylist gates block risky payloads before Codex runs. |
 | Post-hoc debugging is painful | Every turn is written to JSONL audit logs. |
 
+## Compared With Other Tools
+
+| Tool | Main focus | AegisLoop difference |
+| --- | --- | --- |
+| Codex CLI | Local coding agent | AegisLoop keeps ChatGPT as planner and Codex as executor. |
+| Aider | Git-native pair programming | AegisLoop focuses on browser-to-local loop orchestration. |
+| OpenHands | Full agent platform | AegisLoop is smaller, local-first, and ChatGPT-page driven. |
+| Nanobrowser | Browser automation | AegisLoop targets coding loops, not general web automation. |
+| ai-dev-orchestrator | ChatGPT-to-local agent bridge | AegisLoop uses a Chrome extension plus local safety gates. |
+
 ## Quick Start
+
+The short path:
+
+1. Start the local bridge.
+2. Open a ChatGPT conversation.
+3. Click **Connect this chat** if needed, then **Start loop**.
+
+For a step-by-step walkthrough, see [docs/first-run.md](docs/first-run.md).
 
 ### 1. Clone
 
@@ -85,7 +123,7 @@ Invoke-RestMethod http://127.0.0.1:17380/health
 If the page already contains a valid `codex` block, click:
 
 ```text
-Run current codex / start
+Start loop
 ```
 
 If there is no usable `codex` block yet, type the first task in the AegisLoop panel and start the loop.
@@ -154,6 +192,8 @@ These files are local runtime state and are ignored by git:
 
 - Launch copy: [docs/launch-posts.md](docs/launch-posts.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
+- First-run guide: [docs/first-run.md](docs/first-run.md)
+- Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Chinese / 中文说明

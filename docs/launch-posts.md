@@ -8,6 +8,16 @@ It connects a ChatGPT web conversation to a local Codex session, then adds the p
 
 GitHub: https://github.com/MHW888888/aegisloop
 
+## English v0.2.0 Lite Post
+
+AegisLoop v0.2.0 is out: a simpler "Lite" pass focused on first-run clarity.
+
+The project still does the same thing: ChatGPT plans, local Codex executes, and a local bridge keeps the loop bounded with gates, workspace locks, dedupe, and audit logs.
+
+This release makes it easier to understand and try: clearer README positioning, friendlier extension labels, a first-run guide, and troubleshooting docs.
+
+GitHub: https://github.com/MHW888888/aegisloop
+
 ## English Longer Post
 
 I built AegisLoop because I wanted a safer way to run ChatGPT x Codex loops.
@@ -30,6 +40,16 @@ GitHub: https://github.com/MHW888888/aegisloop
 记录一个小项目：AegisLoop。
 它是一个 ChatGPT x Codex 的本地自动化桥，让 ChatGPT 负责规划和复盘，让 Codex 在本地项目里执行，同时加上本地闸门、工作区锁、去重和审计日志。
 不是为了“完全无人驾驶”，而是为了让自动化循环更可控、更可追踪。
+
+GitHub: https://github.com/MHW888888/aegisloop
+
+## 中文 v0.2.0 Lite 版
+
+AegisLoop v0.2.0 发了，这版重点不是堆复杂功能，而是做“亲民 Lite 版”。
+
+它还是那个核心思路：ChatGPT 负责规划，本地 Codex 负责执行，中间由本地 bridge 加安全闸门、工作区锁、去重和审计日志。
+
+这版主要改了 README 首屏表达、扩展面板文案、首次运行指南和排错文档，让第一次看到的人更容易理解，也更敢上手。
 
 GitHub: https://github.com/MHW888888/aegisloop
 

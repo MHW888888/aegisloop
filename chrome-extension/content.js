@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '2.3.1';
+  const CONTENT_VERSION = '2.4.0';
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -570,26 +570,26 @@
       </style>
       <header><b>AegisLoop <span class="muted" id="le-ver">v${CONTENT_VERSION}</span></b><button id="le-dbg" title="debug log">debug</button></header>
       <div class="body">
-        <div class="row"><span class="k">bridge</span><span id="le-bridge" class="pill le-bad">offline</span></div>
-        <div class="row"><span class="k">conversation</span><span id="le-conv" class="muted">-</span></div>
-        <div class="row"><span class="k">codex session</span><span id="le-sess" class="muted">-</span></div>
-        <div class="row"><span class="k">state</span><span id="le-state" class="pill le-run">-</span></div>
+        <div class="row"><span class="k">Local bridge</span><span id="le-bridge" class="pill le-bad">not running</span></div>
+        <div class="row"><span class="k">ChatGPT tab</span><span id="le-conv" class="muted">-</span></div>
+        <div class="row"><span class="k">Local Codex session</span><span id="le-sess" class="muted">-</span></div>
+        <div class="row"><span class="k">Status</span><span id="le-state" class="pill le-run">-</span></div>
         <div id="le-reason" class="muted"></div>
         <div id="le-bindbox" style="display:none">
-          <div class="muted">This conversation is not bound.</div>
-          <input id="le-sessin" placeholder="codex sessionId (019f...)" />
-          <input id="le-wsin" placeholder="workspaceDir, e.g. C:\\yiming_dev" />
-          <button id="le-bind" class="go" style="width:100%;margin-top:6px">Bind conversation</button>
+          <div class="muted">Connect this ChatGPT tab to a local Codex session.</div>
+          <input id="le-sessin" placeholder="Local Codex session id (019f...)" />
+          <input id="le-wsin" placeholder="Workspace folder, e.g. C:\\my-project" />
+          <button id="le-bind" class="go" style="width:100%;margin-top:6px">Connect this chat</button>
         </div>
         <div id="le-blocked" style="display:none">
-          <div class="pill le-warn">Blocked by local gate</div>
+          <div class="pill le-warn">Needs approval</div>
           <div id="le-blocked-rule" class="muted"></div>
-          <div class="grid" style="margin-top:6px"><button id="le-approve" class="go">Approve once</button><button id="le-skip">Skip</button></div>
+          <div class="grid" style="margin-top:6px"><button id="le-approve" class="go">Allow once</button><button id="le-skip">Skip</button></div>
         </div>
         <div id="le-simple" class="pill le-run">checking...</div>
-        <div id="le-seed-label" class="muted">Only type here when this page has no codex block:</div>
-        <textarea id="le-seed" placeholder="First task for GPT, e.g. continue from the current result."></textarea>
-        <button id="le-send" class="go" style="width:100%">Run current codex / start</button>
+        <div id="le-seed-label" class="muted">First instruction</div>
+        <textarea id="le-seed" placeholder="Type only if this page has no codex block yet."></textarea>
+        <button id="le-send" class="go" style="width:100%">Start loop</button>
         <div class="grid"><button id="le-resume" class="go" style="display:none">Continue</button><button id="le-pause">Pause</button><button id="le-stop" class="danger">Stop</button></div>
         <div id="le-confirm" style="display:none"><div class="pill le-bad">Confirm stop?</div><div class="grid" style="margin-top:6px"><button id="le-stop-yes" class="danger">Confirm</button><button id="le-stop-no">Cancel</button></div></div>
       </div>`;
@@ -599,7 +599,7 @@
     panel.querySelector('#le-bind').onclick = async () => {
       const s = panel.querySelector('#le-sessin').value.trim();
       const w = panel.querySelector('#le-wsin').value.trim();
-      if (!s || !w) return alert('Fill Codex Session ID and workspaceDir');
+      if (!s || !w) return alert('Fill Local Codex session id and workspace folder');
       await saveLocalBinding(LE.conversationId, s, w);
       LE.bound = false; await ensureRegistered(); renderPanel();
     };
@@ -676,7 +676,7 @@
     if (!panel) buildPanel();
     const $ = s => panel.querySelector(s);
     const ready = currentReadyCodex();
-    pill($('#le-bridge'), LE.bridgeOk ? 'le-ok' : 'le-bad', LE.bridgeOk ? 'online' : 'offline');
+    pill($('#le-bridge'), LE.bridgeOk ? 'le-ok' : 'le-bad', LE.bridgeOk ? 'online' : 'not running');
     $('#le-conv').textContent = LE.conversationId ? LE.conversationId.slice(0, 8) + '...' : '(none)';
     $('#le-sess').textContent = LE.codexSessionId ? LE.codexSessionId.slice(0, 8) + '...' : '-';
     const map = { running: 'le-run', paused: 'le-warn', halted: 'le-bad' };
@@ -689,9 +689,9 @@
     $('#le-resume').style.display = (LE.loopState === 'paused') ? 'block' : 'none';
     if (LE.local === 'dispatching') pill($('#le-simple'), 'le-run', 'Codex is running. Wait for result.');
     else if (LE.local === 'inserting') pill($('#le-simple'), 'le-run', 'Sending Codex result to GPT.');
-    else if (ready) pill($('#le-simple'), 'le-ok', 'Ready: click Run current codex / start.');
-    else if (LE.loopState === 'paused') pill($('#le-simple'), 'le-warn', 'Paused: click Continue, or type first task if no codex.');
-    else pill($('#le-simple'), 'le-warn', 'No codex block yet. Type first task, then start.');
+    else if (ready) pill($('#le-simple'), 'le-ok', 'Ready: click Start loop.');
+    else if (LE.loopState === 'paused') pill($('#le-simple'), 'le-warn', 'Paused: click Continue, or add a first instruction.');
+    else pill($('#le-simple'), 'le-warn', 'No codex block yet. Add a first instruction, then start.');
     const showSeed = !ready && LE.local !== 'dispatching' && LE.local !== 'inserting';
     $('#le-seed-label').style.display = showSeed ? 'block' : 'none';
     $('#le-seed').style.display = showSeed ? 'block' : 'none';
