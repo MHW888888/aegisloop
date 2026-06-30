@@ -43,6 +43,16 @@ function loadConfig() {
 
 let CONFIG = loadConfig();
 const PORT = CONFIG.port || 17380;
+const API_TOKEN = String(CONFIG.apiToken || '').trim();
+
+function isApiAuthorized(request) {
+  if (!API_TOKEN) return true;
+  return request.headers['x-aegisloop-token'] === API_TOKEN;
+}
+
+function corsOrigin() {
+  return CONFIG.corsAllowOrigin || 'https://chatgpt.com';
+}
 
 function safeSegment(value, fallback) {
   return String(value || fallback || 'default')
@@ -606,9 +616,9 @@ function sendJson(response, code, object) {
   const body = JSON.stringify(object);
   response.writeHead(code, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': corsOrigin(),
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type,X-AegisLoop-Token',
   });
   response.end(body);
 }
@@ -636,6 +646,13 @@ const server = http.createServer(async (request, response) => {
         service: 'aegisloop-bridge',
         port: PORT,
         conversations: Object.keys(STATE.conversations).length,
+      });
+    }
+
+    if (url.pathname.startsWith('/api/') && !isApiAuthorized(request)) {
+      return sendJson(response, 401, {
+        error: 'unauthorized',
+        message: 'Missing or invalid X-AegisLoop-Token',
       });
     }
 
@@ -712,9 +729,6 @@ const server = http.createServer(async (request, response) => {
 
       if (conversation.pendingResult && !conversation.pendingResult.consumed) {
         const result = conversation.pendingResult;
-        conversation.pendingResult.consumed = true;
-        conversation.updatedAt = Date.now();
-        saveState();
         return sendJson(response, 200, {
           hasResult: true,
           result,
@@ -724,6 +738,63 @@ const server = http.createServer(async (request, response) => {
 
       return sendJson(response, 200, {
         hasResult: false,
+        loopState: conversation.loopState,
+        pauseReason: conversation.pauseReason,
+      });
+    }
+
+    if (url.pathname === '/api/result/ack' && request.method === 'POST') {
+      const body = await readBody(request);
+      const conversation = getConversation(body.conversationId);
+      if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      if (!conversation.pendingResult || conversation.pendingResult.consumed) {
+        return sendJson(response, 409, { error: 'no pending result' });
+      }
+      if (body.jobId && body.jobId !== conversation.pendingResult.jobId) {
+        return sendJson(response, 409, {
+          error: 'jobId mismatch',
+          pendingJobId: conversation.pendingResult.jobId,
+        });
+      }
+
+      conversation.pendingResult.consumed = true;
+      conversation.updatedAt = Date.now();
+      saveState();
+      audit(conversation.conversationId, {
+        type: 'result_ack',
+        jobId: conversation.pendingResult.jobId,
+        turn: conversation.pendingResult.turn,
+      });
+      return sendJson(response, 200, { ok: true, hasPendingResult: false });
+    }
+
+    if (url.pathname === '/api/result/nack' && request.method === 'POST') {
+      const body = await readBody(request);
+      const conversation = getConversation(body.conversationId);
+      if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      if (!conversation.pendingResult || conversation.pendingResult.consumed) {
+        return sendJson(response, 409, { error: 'no pending result' });
+      }
+      if (body.jobId && body.jobId !== conversation.pendingResult.jobId) {
+        return sendJson(response, 409, {
+          error: 'jobId mismatch',
+          pendingJobId: conversation.pendingResult.jobId,
+        });
+      }
+
+      conversation.loopState = 'paused';
+      conversation.pauseReason = body.reason || 'result_not_acknowledged';
+      conversation.updatedAt = Date.now();
+      saveState();
+      audit(conversation.conversationId, {
+        type: 'result_nack',
+        jobId: conversation.pendingResult.jobId,
+        turn: conversation.pendingResult.turn,
+        reason: conversation.pauseReason,
+      });
+      return sendJson(response, 200, {
+        ok: true,
+        hasPendingResult: true,
         loopState: conversation.loopState,
         pauseReason: conversation.pauseReason,
       });

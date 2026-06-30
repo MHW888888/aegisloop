@@ -11,11 +11,12 @@
 
 const BRIDGE = 'http://127.0.0.1:17380';
 
-async function bridgeFetch(pathAndQuery, method, body) {
+async function bridgeFetch(pathAndQuery, method, body, token) {
   const opt = {
     method: method || 'GET',
     headers: { 'Content-Type': 'application/json' },
   };
+  if (token) opt.headers['X-AegisLoop-Token'] = token;
   if (body !== undefined) opt.body = JSON.stringify(body);
 
   const resp = await fetch(BRIDGE + pathAndQuery, opt);
@@ -31,7 +32,7 @@ async function bridgeFetch(pathAndQuery, method, body) {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg || msg.type !== 'BRIDGE') return false;
-  bridgeFetch(msg.path, msg.method, msg.body)
+  bridgeFetch(msg.path, msg.method, msg.body, msg.token)
     .then(r => sendResponse({ ok: true, ...r }))
     .catch(e => sendResponse({ ok: false, error: String(e) }));
   return true;

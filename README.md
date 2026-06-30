@@ -26,6 +26,17 @@ Version `v0.2.0` focuses on first-run clarity:
 
 The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
 
+## Current Focus: v0.3.x Hardening
+
+Version `v0.3.1` hardens the v0.3 Parallel Safe Mode foundation:
+
+- optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
+- explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
+- aligned package, extension, and protocol versions;
+- Run Capsule project / branch / run / mode shown in the extension panel.
+
+`/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
+
 ## Why AegisLoop
 
 ChatGPT is good at planning, critique, and next-step design. Codex is good at reading real files, making local changes, and running checks. AegisLoop connects them with a local control plane:
@@ -98,6 +109,7 @@ Edit `config.json`:
 - `codexSessionId`: local Codex session id to resume.
 - `workspaceDir`: local workspace for that session.
 - `codex.bin` / `codex.args`: Node.js and Codex CLI paths.
+- optional `apiToken`: when set, the Chrome extension must send this token to use bridge APIs.
 
 ### 3. Start The Bridge
 
@@ -110,6 +122,8 @@ Check health:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:17380/health
 ```
+
+If you set `apiToken`, save the same token in the extension panel when prompted.
 
 ### 4. Load The Chrome Extension
 
@@ -151,6 +165,8 @@ AegisLoop treats `<<<LOOP_STOP>>>` as a stop signal only when it is the whole as
 
 AegisLoop does not trust web content to decide local authority.
 
+If `apiToken` is set in `config.json`, every bridge endpoint under `/api/*` requires `X-AegisLoop-Token`. This prevents arbitrary local web pages from reading bindings or dispatching work through the bridge. Keep the token private and do not commit it.
+
 The bridge can block payloads that appear to request:
 
 - production signals
@@ -163,6 +179,12 @@ The bridge can block payloads that appear to request:
 - weight changes
 
 For parallel research runs, Run Capsules can also block ambiguous stage labels unless the prompt includes the configured `activeBranch`.
+
+Codex results use an explicit ACK flow:
+
+- `GET /api/result` returns a pending result without consuming it.
+- `POST /api/result/ack` marks it consumed only after the extension confirms ChatGPT received the result.
+- `POST /api/result/nack` keeps it pending and pauses the loop when insertion fails.
 
 You can intentionally auto-approve selected low-risk gate rules:
 

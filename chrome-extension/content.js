@@ -27,7 +27,8 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '2.4.0';
+  const CONTENT_VERSION = '0.3.1';
+  const CONTRACT_VERSION = 'le-3.1';
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -73,7 +74,7 @@
   // ----------------------------------------------------------------------------
   const CONTRACT = [
     '',
-    '[AegisLoop protocol le-2.0]',
+    `[AegisLoop protocol ${CONTRACT_VERSION}]`,
     'Evaluate the Codex result above, then give the next step.',
     'Your reply MUST end with exactly one of these:',
     '1) one fenced ```codex block with the next instruction for local Codex,',
@@ -111,10 +112,13 @@
     codexSessionId: null,
     workspaceDir: null,
     fullAuto: true,
+    apiToken: null,
+    authRequired: false,
     bridgeOk: false,
     loopState: 'running',          // mirrors the bridge: running | paused | halted
     pauseReason: null,
     blockedPayload: null,
+    capsule: null,
     local: 'idle',                 // idle | awaiting_assistant | dispatching | inserting
     lastSig: null,                 // signature of the assistant message already handled
     initializedLatestSig: false,
@@ -142,9 +146,10 @@
   function bridge(pathAndQuery, method, body) {
     return new Promise((resolve) => {
       try {
-        chrome.runtime.sendMessage({ type: 'BRIDGE', path: pathAndQuery, method, body }, (resp) => {
+        chrome.runtime.sendMessage({ type: 'BRIDGE', path: pathAndQuery, method, body, token: LE.apiToken }, (resp) => {
           const err = chrome.runtime.lastError && chrome.runtime.lastError.message;
           if (err || !resp) return resolve({ ok: false, error: err || 'empty bridge response' });
+          if (resp.status === 401) LE.authRequired = true;
           resolve(resp);
         });
       } catch (e) {
@@ -176,12 +181,19 @@
       LE.bound = true;
       LE.codexSessionId = r.json.codexSessionId;
       LE.workspaceDir = r.json.workspaceDir;
+      LE.capsule = r.json.capsule || null;
       LE.fullAuto = r.json.fullAuto !== false;
       LE.bridgeOk = true;
+      LE.authRequired = false;
       log('registered', id, '->', LE.codexSessionId, LE.workspaceDir);
     } else if (r.ok && r.status === 409) {
       LE.bound = false;            // unknown conversation, fill Codex Session ID in the panel
       LE.bridgeOk = true;
+      LE.authRequired = false;
+    } else if (r.ok && r.status === 401) {
+      LE.bound = false;
+      LE.bridgeOk = true;
+      LE.authRequired = true;
     } else {
       LE.bridgeOk = false;         // bridge not up
     }
@@ -193,6 +205,12 @@
   }
   function saveLocalBinding(id, codexSessionId, workspaceDir) {
     return new Promise(res => chrome.storage.local.set({ ['binding:' + id]: { codexSessionId, workspaceDir } }, res));
+  }
+  function loadApiToken() {
+    return new Promise(res => chrome.storage.local.get(['apiToken'], o => res(o.apiToken || '')));
+  }
+  function saveApiToken(token) {
+    return new Promise(res => chrome.storage.local.set({ apiToken: token || '' }, res));
   }
 
   // ----------------------------------------------------------------------------
@@ -412,12 +430,15 @@
 
       // Pull authoritative state from the bridge.
       const cs = await bridge('/api/conversations', 'GET');
+      if (cs.ok && cs.status === 401) { LE.authRequired = true; LE.bridgeOk = true; return; }
       if (!(cs.ok && cs.status === 200)) { LE.bridgeOk = false; return; }
+      LE.authRequired = false;
       const me = (cs.json.conversations || []).find(c => c.conversationId === LE.conversationId);
       if (!me) { LE.bound = false; return; }
       LE.loopState = me.loopState;
       LE.pauseReason = me.pauseReason;
       LE.blockedPayload = me.blockedPayload || null;
+      LE.capsule = me.capsule || null;
 
       if (LE.loopState === 'paused' && (me.activeDispatchHash || me.hasPendingResult) && !LE.userHold && !LE.blockedPayload && isRecoverablePauseReason(LE.pauseReason)) {
         log('paused but bridge has active/pending work; resuming result polling');
@@ -465,10 +486,21 @@
           LE.local = 'inserting';
           const payload = result.finalMessage + '\n' + CONTRACT;
           const sent = await submitToGPT(payload);
-          if (sent) { LE.local = 'awaiting_assistant'; LE.reformatCount = 0; }
+          if (sent) {
+            await bridge('/api/result/ack', 'POST', {
+              conversationId: LE.conversationId,
+              jobId: result.jobId,
+            });
+            LE.local = 'awaiting_assistant';
+            LE.reformatCount = 0;
+          }
           else {
             LE.local = 'idle';
-            await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'result_insert_failed' });
+            await bridge('/api/result/nack', 'POST', {
+              conversationId: LE.conversationId,
+              jobId: result.jobId,
+              reason: 'result_insert_failed',
+            });
             log('insert failed -> paused for human');
           }
         }
@@ -566,14 +598,28 @@
         #le-panel button.go{background:#16331f;border-color:#2a5a36;color:#b6ffc8}
         #le-panel .muted{color:#8a93a3;font-size:11px}
         #le-panel .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+        #le-panel .capsule{border:1px solid #2a2e37;border-radius:8px;padding:7px;background:#11141a}
         .le-ok{background:#16331f;color:#b6ffc8}.le-warn{background:#3a2f12;color:#ffe39a}.le-bad{background:#3a1c1f;color:#ffb4b4}.le-run{background:#13283a;color:#9fd2ff}
       </style>
       <header><b>AegisLoop <span class="muted" id="le-ver">v${CONTENT_VERSION}</span></b><button id="le-dbg" title="debug log">debug</button></header>
       <div class="body">
         <div class="row"><span class="k">Local bridge</span><span id="le-bridge" class="pill le-bad">not running</span></div>
+        <div id="le-tokenbox" style="display:none">
+          <div class="pill le-warn">Bridge token required</div>
+          <input id="le-token" type="password" placeholder="X-AegisLoop-Token" style="margin-top:6px" />
+          <button id="le-token-save" class="go" style="width:100%;margin-top:6px">Save token</button>
+        </div>
         <div class="row"><span class="k">ChatGPT tab</span><span id="le-conv" class="muted">-</span></div>
         <div class="row"><span class="k">Local Codex session</span><span id="le-sess" class="muted">-</span></div>
         <div class="row"><span class="k">Status</span><span id="le-state" class="pill le-run">-</span></div>
+        <div id="le-capsule" class="capsule">
+          <div class="row"><span class="k">Capsule</span><span id="le-capsule-state" class="pill le-warn">legacy</span></div>
+          <div class="row"><span class="k">Project</span><span id="le-cap-project" class="muted">-</span></div>
+          <div class="row"><span class="k">Branch</span><span id="le-cap-branch" class="muted">-</span></div>
+          <div class="row"><span class="k">Mode</span><span id="le-cap-mode" class="muted">-</span></div>
+          <div class="row"><span class="k">Run</span><span id="le-cap-run" class="muted">-</span></div>
+          <div class="row"><span class="k">Write root</span><span id="le-cap-root" class="muted">-</span></div>
+        </div>
         <div id="le-reason" class="muted"></div>
         <div id="le-bindbox" style="display:none">
           <div class="muted">Connect this ChatGPT tab to a local Codex session.</div>
@@ -596,6 +642,15 @@
     document.body.appendChild(panel);
 
     panel.querySelector('#le-dbg').onclick = () => { LE.debug = !LE.debug; panel.querySelector('#le-dbg').style.color = LE.debug ? '#b6ffc8' : ''; };
+    panel.querySelector('#le-token-save').onclick = async () => {
+      const token = panel.querySelector('#le-token').value.trim();
+      await saveApiToken(token);
+      LE.apiToken = token;
+      LE.authRequired = false;
+      LE.bound = false;
+      await ensureRegistered();
+      renderPanel();
+    };
     panel.querySelector('#le-bind').onclick = async () => {
       const s = panel.querySelector('#le-sessin').value.trim();
       const w = panel.querySelector('#le-wsin').value.trim();
@@ -677,11 +732,29 @@
     const $ = s => panel.querySelector(s);
     const ready = currentReadyCodex();
     pill($('#le-bridge'), LE.bridgeOk ? 'le-ok' : 'le-bad', LE.bridgeOk ? 'online' : 'not running');
+    $('#le-tokenbox').style.display = LE.authRequired ? 'block' : 'none';
     $('#le-conv').textContent = LE.conversationId ? LE.conversationId.slice(0, 8) + '...' : '(none)';
     $('#le-sess').textContent = LE.codexSessionId ? LE.codexSessionId.slice(0, 8) + '...' : '-';
     const map = { running: 'le-run', paused: 'le-warn', halted: 'le-bad' };
     const label = { running: 'running', paused: 'paused', halted: 'halted' };
     pill($('#le-state'), map[LE.loopState] || 'le-run', (label[LE.loopState] || LE.loopState) + (LE.loopState === 'running' ? ' - ' + LE.local : ''));
+    const cap = LE.capsule;
+    if (cap && cap.enabled) {
+      const rootOk = /\\runs\\|\/runs\//i.test(cap.allowedWriteRoot || '') || /AegisLoopRuntime/i.test(cap.allowedWriteRoot || '');
+      pill($('#le-capsule-state'), rootOk ? 'le-ok' : 'le-warn', rootOk ? 'enabled' : 'check root');
+      $('#le-cap-project').textContent = cap.projectId || '-';
+      $('#le-cap-branch').textContent = cap.activeBranch || '-';
+      $('#le-cap-mode').textContent = cap.mode || '-';
+      $('#le-cap-run').textContent = cap.runId || '-';
+      $('#le-cap-root').textContent = cap.allowedWriteRoot ? 'external' : '-';
+    } else {
+      pill($('#le-capsule-state'), 'le-warn', 'legacy');
+      $('#le-cap-project').textContent = '-';
+      $('#le-cap-branch').textContent = '-';
+      $('#le-cap-mode').textContent = '-';
+      $('#le-cap-run').textContent = '-';
+      $('#le-cap-root').textContent = 'workspace';
+    }
     $('#le-reason').textContent = LE.pauseReason ? ('reason: ' + LE.pauseReason) : '';
     $('#le-bindbox').style.display = (LE.conversationId && !LE.bound && LE.bridgeOk) ? 'block' : 'none';
     $('#le-blocked').style.display = LE.blockedPayload ? 'block' : 'none';
@@ -701,6 +774,7 @@
   // Startup
   // ----------------------------------------------------------------------------
   buildPanel();
+  loadApiToken().then(token => { LE.apiToken = token || null; });
   setInterval(tick, 1500);
   const mo = new MutationObserver(() => { /* nudge next tick when DOM changes */ });
   mo.observe(document.documentElement, { childList: true, subtree: true });
