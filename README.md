@@ -37,6 +37,7 @@ Version `v0.3.2` adds Conversation Mode on top of the v0.3 Parallel Safe Mode fo
 - default Chat Mode, so normal Q&A is not interpreted as automation;
 - explicit Arm one run / Arm loop buttons;
 - per-arm nonce checks so old `codex` blocks cannot be resurrected accidentally.
+- Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
 
@@ -211,6 +212,14 @@ For safer multi-thread research runs, enable **Parallel Safe Mode** with a Run C
 
 See [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md).
 
+For long-running runner threads, use **Dual Briefing**:
+
+- paste the short `GPT_THREAD_BRIEF.md` into ChatGPT;
+- keep `CODEX_EXECUTION_BRIEF.md`, `RESEARCH_RULES.md`, `FROZEN_BRANCHES.md`, and `CURRENT_OBJECTIVE.md` in the Run Capsule `inbox`;
+- ask Codex to read the capsule and inbox files before executing.
+
+See [docs/dual-briefing.md](docs/dual-briefing.md) and [templates/briefings/](templates/briefings/).
+
 ## Runtime Files
 
 These files are local runtime state and are ignored by git:
@@ -229,43 +238,38 @@ These files are local runtime state and are ignored by git:
 - First-run guide: [docs/first-run.md](docs/first-run.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Parallel Safe Mode: [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md)
+- Dual Briefing / 双端初始化: [docs/dual-briefing.md](docs/dual-briefing.md)
+- Briefing templates: [templates/briefings/](templates/briefings/)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Chinese / 中文说明
+## 中文说明
 
-**AegisLoop** 是一个把 ChatGPT 网页对话和本地 Codex session 连接起来的“有护栏自动循环”工具。
-它适合这样的工作流：
+**AegisLoop** 是一个把 ChatGPT 网页对话和本地 Codex session 连接起来的本地优先自动化桥。它让 ChatGPT 负责规划，让本地 Codex 负责执行，中间加上安全闸门、运行胶囊、审计日志和显式授权。
+
+典型流程：
 
 ```text
-ChatGPT 负责规划和复盘
-Codex 负责本地读文件、改文件、跑检查
-AegisLoop 负责转发任务、回填结果、执行本地闸门
+ChatGPT 规划下一步 -> AegisLoop 转发给本地 Codex -> Codex 执行并回报 -> AegisLoop 把结果贴回 ChatGPT -> ChatGPT 决定下一步
 ```
 
-### 它解决什么问题？
+关键设计：
 
-普通网页 ChatGPT 不能直接读取你的本地项目，也不能可靠地持续驱动 Codex。Codex 能操作本地文件，但它需要明确的下一步任务。
-AegisLoop 把两者接起来：
+- **默认 Chat Mode**：普通问答不会触发执行。
+- **显式 Arm**：只有点 Arm one run / Arm loop 后才执行。
+- **Run Capsule**：每条执行线程绑定 project、branch、run 和 external write root，避免两个分支串线。
+- **Dual Briefing**：GPT 只拿短规划简报，Codex 在本地读取完整执行简报。
+- **本地安全闸门**：越界 payload 会先被 bridge 拦截。
+- **ACK/NACK 结果确认**：结果只有成功贴回 ChatGPT 后才标记为已消费。
 
-1. ChatGPT 输出一个 `codex` 指令块。
-2. AegisLoop 把指令发给绑定的本地 Codex session。
-3. Codex 在本地项目目录执行并输出结果。
-4. AegisLoop 把结果贴回 ChatGPT。
-5. ChatGPT 复盘并给下一条 `codex` 指令。
+如果你同时跑多个项目或多个研究分支，推荐使用：
 
-### 关键设计
+```text
+Discussion Thread = 正常问答，只讨论不执行
+Runner Thread = 单一 active_branch，只执行
+Archive Thread = 冻结支线，只保留状态
+```
 
-- **绑定关系本地配置**：ChatGPT 不能自己修改 `codexSessionId` 或 `workspaceDir`。
-- **本地安全闸门**：越界指令会被拦截。
-- **同目录串行执行**：两个线程写同一个项目时不会并发乱写。
-- **结果可审计**：每轮都有 JSONL 日志。
-- **停止信号明确**：只有整条回复为 `<<<LOOP_STOP>>>` 时才停止。
-
-### 同时跑多个线程
-
-可以同时打开多个 ChatGPT 页面。
-如果它们都写同一个项目目录，AegisLoop 会自动排队，保证同一时间只有一个 Codex 写入该目录。
-如果你想真正并行，请给每条线单独的 git worktree 或项目副本。
+详细中文/英文教程见 [docs/dual-briefing.md](docs/dual-briefing.md)。
 
 ## Roadmap
 

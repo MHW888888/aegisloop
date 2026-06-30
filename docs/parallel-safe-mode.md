@@ -17,6 +17,14 @@ It does not answer:
 
 Run Capsules answer those questions.
 
+For long-running work, pair the capsule with **Dual Briefing**:
+
+- the capsule identifies the project, branch, run, source directory, and write root;
+- `inbox/GPT_THREAD_BRIEF.md` tells ChatGPT what role this thread has;
+- `inbox/CODEX_EXECUTION_BRIEF.md` tells Codex what files to read, where to write, and how to verify.
+
+See [dual-briefing.md](dual-briefing.md).
+
 ## Example
 
 ```json
@@ -59,6 +67,11 @@ C:\AegisLoopRuntime\
         run-20260630-001\
           capsule.json
           inbox\
+            GPT_THREAD_BRIEF.md
+            CODEX_EXECUTION_BRIEF.md
+            RESEARCH_RULES.md
+            FROZEN_BRANCHES.md
+            CURRENT_OBJECTIVE.md
           outbox\
           patches\
 ```
