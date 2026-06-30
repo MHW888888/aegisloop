@@ -28,12 +28,15 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.1` hardens the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.2` adds Conversation Mode on top of the v0.3 Parallel Safe Mode foundation:
 
 - optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
 - explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
 - aligned package, extension, and protocol versions;
 - Run Capsule project / branch / run / mode shown in the extension panel.
+- default Chat Mode, so normal Q&A is not interpreted as automation;
+- explicit Arm one run / Arm loop buttons;
+- per-arm nonce checks so old `codex` blocks cannot be resurrected accidentally.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
 
@@ -138,10 +141,10 @@ If you set `apiToken`, save the same token in the extension panel when prompted.
 If the page already contains a valid `codex` block, click:
 
 ```text
-Start loop
+Arm one run
 ```
 
-If there is no usable `codex` block yet, type the first task in the AegisLoop panel and start the loop.
+If there is no usable fresh `codex` block yet, type the first task in the AegisLoop panel and click **Arm one run** or **Arm loop**. AegisLoop will inject the current arm nonce into the protocol prompt.
 
 ## The Protocol
 
@@ -149,7 +152,7 @@ ChatGPT must end each actionable reply with exactly one fenced `codex` block:
 
 ````markdown
 ```codex
-{"prompt":"Read the current project state, make the smallest safe change, run checks, and report back."}
+{"aegisloop":true,"arm_nonce":"aegis-YYYYMMDD-xxxx","prompt":"Read the current project state, make the smallest safe change, run checks, and report back."}
 ```
 ````
 
@@ -160,6 +163,8 @@ Or, if the loop should stop:
 ```
 
 AegisLoop treats `<<<LOOP_STOP>>>` as a stop signal only when it is the whole assistant reply.
+
+By default, each conversation is in **Chat Mode**. In Chat Mode, AegisLoop does not parse `codex` blocks, does not dispatch tasks, and does not send reformat nudges. Execution only starts after the user explicitly arms the conversation from the extension panel.
 
 ## Safety Model
 

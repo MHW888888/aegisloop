@@ -1,8 +1,10 @@
 {
   "port": 17380,
-  "contractVersion": "le-3.1",
+  "contractVersion": "le-3.2",
   "apiToken": "",
   "corsAllowOrigin": "https://chatgpt.com",
+  "armTtlMs": 600000,
+  "armLoopMaxDispatches": 12,
   "runtimeRoot": "C:\\AegisLoopRuntime",
   "bindings": [
     {
@@ -10,6 +12,7 @@
       "codexSessionId": "YOUR_CODEX_SESSION_ID",
       "workspaceDir": "C:\\path\\to\\your\\workspace",
       "fullAuto": true,
+      "conversationMode": "chat",
       "capsule": {
         "enabled": false,
         "projectId": "my-project",

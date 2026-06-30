@@ -44,6 +44,8 @@ function loadConfig() {
 let CONFIG = loadConfig();
 const PORT = CONFIG.port || 17380;
 const API_TOKEN = String(CONFIG.apiToken || '').trim();
+const DEFAULT_ARM_TTL_MS = CONFIG.armTtlMs || 10 * 60 * 1000;
+const DEFAULT_ARM_LOOP_MAX_DISPATCHES = CONFIG.armLoopMaxDispatches || 12;
 
 function isApiAuthorized(request) {
   if (!API_TOKEN) return true;
@@ -97,8 +99,13 @@ function defaultConversation(binding) {
     codexSessionId: binding.codexSessionId,
     workspaceDir: binding.workspaceDir,
     fullAuto: binding.fullAuto !== false,
-    loopState: 'running',
-    pauseReason: null,
+    conversationMode: binding.conversationMode || 'chat',
+    loopState: binding.conversationMode === 'frozen' ? 'halted' : 'paused',
+    pauseReason: binding.conversationMode === 'frozen' ? 'frozen' : 'chat_mode',
+    armNonce: null,
+    armExpiresAt: 0,
+    armMaxDispatches: 0,
+    armDispatches: 0,
     executedHashes: [],
     consecutiveFailures: 0,
     lastJobId: null,
@@ -132,6 +139,17 @@ function loadState() {
     existing.workspaceDir = binding.workspaceDir;
     existing.capsule = buildCapsule(binding);
     if (typeof binding.fullAuto === 'boolean') existing.fullAuto = binding.fullAuto;
+    if (!existing.conversationMode) {
+      existing.conversationMode = binding.conversationMode || 'chat';
+      if (existing.conversationMode === 'chat') {
+        existing.loopState = 'paused';
+        existing.pauseReason = 'chat_mode';
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(existing, 'armNonce')) existing.armNonce = null;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'armExpiresAt')) existing.armExpiresAt = 0;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'armMaxDispatches')) existing.armMaxDispatches = 0;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'armDispatches')) existing.armDispatches = 0;
   }
 }
 
@@ -200,6 +218,60 @@ function gateCheck(prompt) {
 function hashPayload(prompt) {
   const normalized = String(prompt).replace(/\s+/g, ' ').trim();
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+}
+
+function newArmNonce() {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `aegis-${date}-${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function armConversation(conversation, maxDispatches) {
+  conversation.conversationMode = 'armed';
+  conversation.loopState = 'running';
+  conversation.pauseReason = null;
+  conversation.armNonce = newArmNonce();
+  conversation.armExpiresAt = Date.now() + DEFAULT_ARM_TTL_MS;
+  conversation.armMaxDispatches = maxDispatches;
+  conversation.armDispatches = 0;
+  conversation.updatedAt = Date.now();
+  saveState();
+  audit(conversation.conversationId, {
+    type: 'mode_arm',
+    armNonce: conversation.armNonce,
+    armExpiresAt: conversation.armExpiresAt,
+    armMaxDispatches: conversation.armMaxDispatches,
+  });
+  return conversation.armNonce;
+}
+
+function setChatMode(conversation, reason) {
+  conversation.conversationMode = 'chat';
+  conversation.loopState = 'paused';
+  conversation.pauseReason = reason || 'chat_mode';
+  conversation.armNonce = null;
+  conversation.armExpiresAt = 0;
+  conversation.armMaxDispatches = 0;
+  conversation.armDispatches = 0;
+  conversation.updatedAt = Date.now();
+  saveState();
+  audit(conversation.conversationId, { type: 'mode_chat', reason: conversation.pauseReason });
+}
+
+function setFrozenMode(conversation) {
+  conversation.conversationMode = 'frozen';
+  conversation.loopState = 'halted';
+  conversation.pauseReason = 'frozen';
+  conversation.armNonce = null;
+  conversation.armExpiresAt = 0;
+  conversation.armMaxDispatches = 0;
+  conversation.armDispatches = 0;
+  conversation.updatedAt = Date.now();
+  saveState();
+  audit(conversation.conversationId, { type: 'mode_frozen' });
+}
+
+function remainingDispatches(conversation) {
+  return Math.max(0, (conversation.armMaxDispatches || 0) - (conversation.armDispatches || 0));
 }
 
 function ensureCapsuleRuntime(conversation) {
@@ -410,7 +482,40 @@ function extractFinal(stdout) {
   return trimmed.length > max ? '...(truncated)\n' + trimmed.slice(-max) : trimmed;
 }
 
-function prepareDispatch(conversation, prompt) {
+function prepareDispatch(conversation, prompt, armNonce) {
+  if (!['armed', 'review'].includes(conversation.conversationMode)) {
+    audit(conversation.conversationId, {
+      type: 'mode_blocked',
+      rule: 'conversation_not_armed',
+      conversationMode: conversation.conversationMode || 'chat',
+    });
+    return {
+      status: 'blocked',
+      rule: 'conversation_not_armed',
+      conversationMode: conversation.conversationMode || 'chat',
+    };
+  }
+  if (!conversation.armNonce || Date.now() > conversation.armExpiresAt) {
+    setChatMode(conversation, 'arm_expired');
+    return {
+      status: 'blocked',
+      rule: 'arm_expired',
+      conversationMode: conversation.conversationMode,
+    };
+  }
+  const providedNonce = String(armNonce || '');
+  if (providedNonce !== conversation.armNonce && !String(prompt).includes(conversation.armNonce)) {
+    audit(conversation.conversationId, {
+      type: 'mode_blocked',
+      rule: 'missing_or_stale_arm_nonce',
+      conversationMode: conversation.conversationMode,
+    });
+    return {
+      status: 'blocked',
+      rule: 'missing_or_stale_arm_nonce',
+      conversationMode: conversation.conversationMode,
+    };
+  }
   if (conversation.loopState !== 'running') {
     return {
       status: 'not_running',
@@ -471,6 +576,8 @@ function prepareDispatch(conversation, prompt) {
 
   conversation.executedHashes.push(hash);
   conversation.activeDispatchHash = hash;
+  conversation.armDispatches = (conversation.armDispatches || 0) + 1;
+  conversation.conversationMode = 'running';
   if (conversation.executedHashes.length > 500) {
     conversation.executedHashes.splice(0, conversation.executedHashes.length - 500);
   }
@@ -663,6 +770,11 @@ const server = http.createServer(async (request, response) => {
           codexSessionId: c.codexSessionId,
           workspaceDir: c.workspaceDir,
           fullAuto: c.fullAuto,
+          conversationMode: c.conversationMode || 'chat',
+          armNonce: c.armNonce || null,
+          armExpiresAt: c.armExpiresAt || 0,
+          armDispatches: c.armDispatches || 0,
+          armMaxDispatches: c.armMaxDispatches || 0,
           loopState: c.loopState,
           pauseReason: c.pauseReason,
           turn: c.turn,
@@ -703,6 +815,11 @@ const server = http.createServer(async (request, response) => {
         workspaceDir: conversation.workspaceDir,
         capsule: conversation.capsule || null,
         fullAuto: conversation.fullAuto,
+        conversationMode: conversation.conversationMode || 'chat',
+        armNonce: conversation.armNonce || null,
+        armExpiresAt: conversation.armExpiresAt || 0,
+        armDispatches: conversation.armDispatches || 0,
+        armMaxDispatches: conversation.armMaxDispatches || 0,
         loopState: conversation.loopState,
         contractVersion: CONFIG.contractVersion,
       });
@@ -716,11 +833,55 @@ const server = http.createServer(async (request, response) => {
         return sendJson(response, 400, { error: 'prompt required' });
       }
 
-      const prepared = prepareDispatch(conversation, body.prompt);
+      const prepared = prepareDispatch(conversation, body.prompt, body.armNonce);
       if (prepared.status === 'accepted') {
         runDispatchAsync(conversation, prepared.prompt, prepared.hash);
       }
       return sendJson(response, 200, prepared);
+    }
+
+    if (url.pathname === '/api/mode' && request.method === 'POST') {
+      const body = await readBody(request);
+      const conversation = getConversation(body.conversationId);
+      if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+
+      if (body.action === 'chat') {
+        setChatMode(conversation, body.reason || 'chat_mode');
+        return sendJson(response, 200, {
+          ok: true,
+          conversationMode: conversation.conversationMode,
+          loopState: conversation.loopState,
+          pauseReason: conversation.pauseReason,
+        });
+      }
+
+      if (body.action === 'freeze') {
+        setFrozenMode(conversation);
+        return sendJson(response, 200, {
+          ok: true,
+          conversationMode: conversation.conversationMode,
+          loopState: conversation.loopState,
+          pauseReason: conversation.pauseReason,
+        });
+      }
+
+      if (body.action === 'arm_once' || body.action === 'arm_loop') {
+        const maxDispatches = body.action === 'arm_once'
+          ? 1
+          : Math.max(1, Number(body.maxDispatches || DEFAULT_ARM_LOOP_MAX_DISPATCHES));
+        const nonce = armConversation(conversation, maxDispatches);
+        return sendJson(response, 200, {
+          ok: true,
+          conversationMode: conversation.conversationMode,
+          loopState: conversation.loopState,
+          armNonce: nonce,
+          armExpiresAt: conversation.armExpiresAt,
+          armDispatches: conversation.armDispatches,
+          armMaxDispatches: conversation.armMaxDispatches,
+        });
+      }
+
+      return sendJson(response, 400, { error: 'unknown mode action' });
     }
 
     if (url.pathname === '/api/result' && request.method === 'GET') {
@@ -758,12 +919,26 @@ const server = http.createServer(async (request, response) => {
       }
 
       conversation.pendingResult.consumed = true;
+      if (remainingDispatches(conversation) > 0 && conversation.armNonce && Date.now() <= conversation.armExpiresAt) {
+        conversation.conversationMode = 'review';
+        conversation.loopState = 'running';
+        conversation.pauseReason = null;
+      } else {
+        conversation.conversationMode = 'chat';
+        conversation.loopState = 'paused';
+        conversation.pauseReason = 'chat_mode';
+        conversation.armNonce = null;
+        conversation.armExpiresAt = 0;
+        conversation.armMaxDispatches = 0;
+        conversation.armDispatches = 0;
+      }
       conversation.updatedAt = Date.now();
       saveState();
       audit(conversation.conversationId, {
         type: 'result_ack',
         jobId: conversation.pendingResult.jobId,
         turn: conversation.pendingResult.turn,
+        conversationMode: conversation.conversationMode,
       });
       return sendJson(response, 200, { ok: true, hasPendingResult: false });
     }

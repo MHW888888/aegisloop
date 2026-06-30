@@ -27,8 +27,8 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.1';
-  const CONTRACT_VERSION = 'le-3.1';
+  const CONTENT_VERSION = '0.3.2';
+  const CONTRACT_VERSION = 'le-3.2';
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -72,36 +72,34 @@
   // ----------------------------------------------------------------------------
   // Contract text (teaches GPT how to end each turn)
   // ----------------------------------------------------------------------------
-  const CONTRACT = [
-    '',
-    `[AegisLoop protocol ${CONTRACT_VERSION}]`,
-    'Evaluate the Codex result above, then give the next step.',
-    'Your reply MUST end with exactly one of these:',
-    '1) one fenced ```codex block with the next instruction for local Codex,',
-    '   either natural language or JSON with a "prompt" field. Example:',
-    '```codex',
-    '{"prompt":"Next task. Keep research_only=true and approved_for_scoring=false."}',
-    '```',
-    '2) if this loop should stop, output exactly one line:',
-    '<<<LOOP_STOP>>>',
-    'Do not put codexSessionId or workspaceDir inside the codex block.',
-    'Do not output trading advice, price prediction, top list, production signal,',
-    'commit, push, or anything that violates the local research gate.',
-  ].join('\n');
+  function contractText() {
+    const nonce = LE.armNonce || 'ARM_NONCE_FROM_PANEL';
+    return [
+      '',
+      `[AegisLoop protocol ${CONTRACT_VERSION}]`,
+      'Evaluate the Codex result above, then give the next step.',
+      'Your reply MUST end with exactly one of these:',
+      '1) one fenced ```codex block with JSON containing the current arm_nonce and the next instruction. Example:',
+      '```codex',
+      `{"aegisloop":true,"arm_nonce":"${nonce}","prompt":"Next task. Keep research_only=true and approved_for_scoring=false."}`,
+      '```',
+      '2) if this loop should stop, output exactly one line:',
+      '<<<LOOP_STOP>>>',
+      'Do not put codexSessionId or workspaceDir inside the codex block.',
+      'Do not output trading advice, price prediction, top list, production signal,',
+      'commit, push, or anything that violates the local research gate.',
+    ].join('\n');
+  }
 
   // Sent automatically when GPT replied but gave no usable codex block, to nudge
   // it back onto the protocol. Bounded by MAX_REFORMAT so it never spams.
-  const REFORMAT_MSG = [
-    '[AegisLoop] Your last reply had no usable ```codex block.',
-    'Reply with ONLY one ```codex block containing the next instruction for local Codex,',
-    'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
-  ].join('\n');
-
-  const CONTINUE_AFTER_STOP_MSG = [
-    '[AegisLoop] The user clicked Continue after your LOOP_STOP.',
-    'If there is a valid next step, reply with ONLY one ```codex block containing that instruction.',
-    'If the loop is truly complete, output exactly one line <<<LOOP_STOP>>>. Nothing else.',
-  ].join('\n');
+  function reformatMsg() {
+    return [
+      '[AegisLoop] Your last reply had no usable ```codex block.',
+      'Reply with ONLY one JSON ```codex block containing arm_nonce="' + (LE.armNonce || 'ARM_NONCE_FROM_PANEL') + '" and the next instruction,',
+      'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
+    ].join('\n');
+  }
 
   // ----------------------------------------------------------------------------
   // State
@@ -111,9 +109,13 @@
     bound: false,
     codexSessionId: null,
     workspaceDir: null,
-    fullAuto: true,
     apiToken: null,
     authRequired: false,
+    conversationMode: 'chat',
+    armNonce: null,
+    armExpiresAt: 0,
+    armDispatches: 0,
+    armMaxDispatches: 0,
     bridgeOk: false,
     loopState: 'running',          // mirrors the bridge: running | paused | halted
     pauseReason: null,
@@ -130,15 +132,6 @@
   };
   const MAX_REFORMAT = 3;
   function log(...a) { if (LE.debug) console.log('%c[LE]', 'color:#0a0', ...a); }
-  function isRecoverablePauseReason(reason) {
-    return !reason || [
-      'manual',
-      'assistant_missing_codex',
-      'result_insert_failed',
-      'seed_submit_not_confirmed',
-      'loop_stop_requested',
-    ].includes(reason);
-  }
 
   // ----------------------------------------------------------------------------
   // Bridge comms (via background relay, to avoid https->http mixed content)
@@ -182,7 +175,11 @@
       LE.codexSessionId = r.json.codexSessionId;
       LE.workspaceDir = r.json.workspaceDir;
       LE.capsule = r.json.capsule || null;
-      LE.fullAuto = r.json.fullAuto !== false;
+      LE.conversationMode = r.json.conversationMode || 'chat';
+      LE.armNonce = r.json.armNonce || null;
+      LE.armExpiresAt = r.json.armExpiresAt || 0;
+      LE.armDispatches = r.json.armDispatches || 0;
+      LE.armMaxDispatches = r.json.armMaxDispatches || 0;
       LE.bridgeOk = true;
       LE.authRequired = false;
       log('registered', id, '->', LE.codexSessionId, LE.workspaceDir);
@@ -248,13 +245,17 @@
 
   function parsePromptPayload(inner) {
     let prompt = String(inner || '').trim();
+    let armNonce = null;
     if (!prompt) return null;
     try {
       const j = JSON.parse(prompt);
-      if (j && typeof j.prompt === 'string') prompt = j.prompt;
+      if (j && typeof j.prompt === 'string') {
+        prompt = j.prompt;
+        armNonce = j.arm_nonce || j.armNonce || null;
+      }
     } catch (e) { /* treat as plain-text prompt */ }
     prompt = String(prompt).trim();
-    return prompt ? { prompt } : null;
+    return prompt ? { prompt, armNonce } : null;
   }
 
   // ----------------------------------------------------------------------------
@@ -291,7 +292,13 @@
     if (isStreaming()) return null;
     const a = latestAssistant();
     const parsed = a ? extractCodex(a) : null;
-    return parsed && parsed.prompt ? { assistant: a, parsed } : null;
+    return parsed && parsed.prompt && canDispatchParsed(parsed) ? { assistant: a, parsed } : null;
+  }
+
+  function canDispatchParsed(parsed) {
+    if (!parsed || !parsed.prompt) return false;
+    if (!['armed', 'review'].includes(LE.conversationMode)) return false;
+    return !!LE.armNonce && parsed.armNonce === LE.armNonce;
   }
 
   // ----------------------------------------------------------------------------
@@ -417,13 +424,11 @@
       renderPanel();
       if (!LE.conversationId || !LE.bound || !LE.bridgeOk) return;
 
-      // On first run, baseline the latest assistant signature so we do not
-      // re-dispatch an old message - UNLESS that message already has a codex
-      // block (then we leave lastSig null so it gets picked up).
+      // On first run, always baseline the latest assistant signature. Old
+      // codex blocks must never resurrect just because the extension loaded.
       if (!LE.initializedLatestSig) {
         const existing = latestAssistant();
-        const existingParsed = existing && !isStreaming() ? extractCodex(existing) : null;
-        LE.lastSig = existingParsed ? null : (existing ? sigOf(existing) : null);
+        LE.lastSig = existing ? sigOf(existing) : null;
         LE.initializedLatestSig = true;
         log('baseline assistant signature initialized', LE.lastSig);
       }
@@ -439,13 +444,15 @@
       LE.pauseReason = me.pauseReason;
       LE.blockedPayload = me.blockedPayload || null;
       LE.capsule = me.capsule || null;
+      LE.conversationMode = me.conversationMode || 'chat';
+      LE.armNonce = me.armNonce || null;
+      LE.armExpiresAt = me.armExpiresAt || 0;
+      LE.armDispatches = me.armDispatches || 0;
+      LE.armMaxDispatches = me.armMaxDispatches || 0;
 
-      if (LE.loopState === 'paused' && (me.activeDispatchHash || me.hasPendingResult) && !LE.userHold && !LE.blockedPayload && isRecoverablePauseReason(LE.pauseReason)) {
-        log('paused but bridge has active/pending work; resuming result polling');
-        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'resume' });
-        LE.loopState = 'running';
-        LE.pauseReason = null;
-        LE.local = 'dispatching';
+      if (LE.conversationMode === 'chat' || LE.conversationMode === 'frozen') {
+        LE.local = 'idle';
+        return;
       }
 
       if (LE.loopState === 'running' && me.hasPendingResult && LE.local !== 'dispatching' && LE.local !== 'inserting') {
@@ -454,27 +461,7 @@
       }
 
       if (LE.loopState !== 'running') {
-        // Auto-resume only when safe AND a fresh codex block is already on screen.
-        const canAutoResume =
-          LE.fullAuto &&
-          LE.loopState === 'paused' &&
-          !LE.userHold &&
-          !LE.blockedPayload &&
-          !me.activeDispatchHash &&
-          isRecoverablePauseReason(LE.pauseReason);
-        const pausedAssistant = canAutoResume && !isStreaming() ? latestAssistant() : null;
-        const pausedCodex = pausedAssistant ? extractCodex(pausedAssistant) : null;
-        if (pausedCodex && pausedCodex.prompt) {
-          log('paused but a codex block is ready; auto-resuming');
-          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'resume' });
-          LE.loopState = 'running';
-          LE.pauseReason = null;
-          LE.local = 'idle';
-          LE.lastSig = null;
-          LE.reformatCount = 0;
-        } else {
-          return;   // stay paused, wait for human or a fresh codex block
-        }
+        return;
       }
 
       // Waiting for a Codex result.
@@ -484,7 +471,7 @@
           const result = rr.json.result;
           log('got codex result, inserting to GPT', result.jobId, 'ok=', result.ok);
           LE.local = 'inserting';
-          const payload = result.finalMessage + '\n' + CONTRACT;
+          const payload = result.finalMessage + '\n' + contractText();
           const sent = await submitToGPT(payload);
           if (sent) {
             await bridge('/api/result/ack', 'POST', {
@@ -508,6 +495,7 @@
       }
 
       if (LE.local === 'inserting') return;
+      if (LE.conversationMode === 'running') return;
 
       // awaiting_assistant / idle: look at GPT's latest reply.
       const a = latestAssistant();
@@ -522,13 +510,17 @@
 
       if (parsed && parsed.stop) {
         LE.lastSig = sig;
-        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'loop_stop_requested' });
-        log('GPT requested LOOP_STOP -> paused, waiting for human confirm to stop');
+        await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'loop_stop_requested' });
+        log('GPT requested LOOP_STOP -> chat mode');
         return;
       }
 
-      if (parsed && parsed.prompt) {
-        const d = await bridge('/api/dispatch', 'POST', { conversationId: LE.conversationId, prompt: parsed.prompt });
+      if (parsed && parsed.prompt && canDispatchParsed(parsed)) {
+        const d = await bridge('/api/dispatch', 'POST', {
+          conversationId: LE.conversationId,
+          prompt: parsed.prompt,
+          armNonce: parsed.armNonce,
+        });
         LE.lastSig = sig;
         if (d.ok && d.json.status === 'accepted') {
           LE.local = 'dispatching';
@@ -540,7 +532,7 @@
           log('conversation already has an active dispatch, waiting result');
         } else if (d.ok && d.json.status === 'duplicate') {
           LE.local = 'idle';
-          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'duplicate_payload' });
+          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'duplicate_payload' });
           log('duplicate payload -> paused for human');
         } else if (d.ok && (d.json.status === 'blocked' || d.json.status === 'not_running')) {
           log('dispatch blocked/not_running:', d.json);
@@ -555,15 +547,15 @@
       if (!LE.userHold && LE.reformatCount < MAX_REFORMAT) {
         LE.reformatCount++;
         log('no codex block -> reformat nudge', LE.reformatCount, '/', MAX_REFORMAT);
-        const sent = await submitToGPT(REFORMAT_MSG);
+        const sent = await submitToGPT(reformatMsg());
         if (sent) { LE.local = 'awaiting_assistant'; }
         else {
           LE.local = 'idle';
-          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'reformat_submit_failed' });
+          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'reformat_submit_failed' });
         }
       } else {
         LE.local = 'idle';
-        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'assistant_missing_codex' });
+        await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'assistant_missing_codex' });
         log('no codex block and reformat budget spent -> paused for human');
       }
       return;
@@ -611,7 +603,7 @@
         </div>
         <div class="row"><span class="k">ChatGPT tab</span><span id="le-conv" class="muted">-</span></div>
         <div class="row"><span class="k">Local Codex session</span><span id="le-sess" class="muted">-</span></div>
-        <div class="row"><span class="k">Status</span><span id="le-state" class="pill le-run">-</span></div>
+        <div class="row"><span class="k">Mode</span><span id="le-state" class="pill le-run">-</span></div>
         <div id="le-capsule" class="capsule">
           <div class="row"><span class="k">Capsule</span><span id="le-capsule-state" class="pill le-warn">legacy</span></div>
           <div class="row"><span class="k">Project</span><span id="le-cap-project" class="muted">-</span></div>
@@ -633,10 +625,11 @@
           <div class="grid" style="margin-top:6px"><button id="le-approve" class="go">Allow once</button><button id="le-skip">Skip</button></div>
         </div>
         <div id="le-simple" class="pill le-run">checking...</div>
-        <div id="le-seed-label" class="muted">First instruction</div>
-        <textarea id="le-seed" placeholder="Type only if this page has no codex block yet."></textarea>
-        <button id="le-send" class="go" style="width:100%">Start loop</button>
-        <div class="grid"><button id="le-resume" class="go" style="display:none">Continue</button><button id="le-pause">Pause</button><button id="le-stop" class="danger">Stop</button></div>
+        <div id="le-seed-label" class="muted">First instruction (optional)</div>
+        <textarea id="le-seed" placeholder="Optional: ask GPT for the next codex task after arming."></textarea>
+        <div class="grid"><button id="le-chat">Chat mode</button><button id="le-send" class="go">Arm one run</button></div>
+        <div class="grid"><button id="le-arm-loop" class="go">Arm loop</button><button id="le-freeze">Freeze</button></div>
+        <button id="le-stop" class="danger" style="width:100%">Stop</button>
         <div id="le-confirm" style="display:none"><div class="pill le-bad">Confirm stop?</div><div class="grid" style="margin-top:6px"><button id="le-stop-yes" class="danger">Confirm</button><button id="le-stop-no">Cancel</button></div></div>
       </div>`;
     document.body.appendChild(panel);
@@ -658,63 +651,50 @@
       await saveLocalBinding(LE.conversationId, s, w);
       LE.bound = false; await ensureRegistered(); renderPanel();
     };
-    panel.querySelector('#le-send').onclick = async () => {
+    async function armAndMaybeSeed(action) {
       const seedBox = panel.querySelector('#le-seed');
-
-      // If GPT has already produced a usable codex block, the safest "start"
-      // action is to dispatch that block directly. Do not inject another seed
-      // message into ChatGPT, because that can race with an already-ready task.
-      const ready = currentReadyCodex();
-      if (ready) {
-        if (LE.loopState !== 'running') await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'resume' });
-        LE.userHold = false;
-        LE.local = 'idle';
-        LE.reformatCount = 0;
-        const sig = sigOf(ready.assistant);
-        const d = await bridge('/api/dispatch', 'POST', { conversationId: LE.conversationId, prompt: ready.parsed.prompt });
-        LE.lastSig = sig;
-        if (d.ok && (d.json.status === 'accepted' || d.json.status === 'busy')) {
-          LE.local = 'dispatching';
-          seedBox.value = '';
-        } else if (d.ok && d.json.status === 'duplicate') {
-          LE.local = 'idle';
-          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'duplicate_payload' });
-        }
-        return;
-      }
-
-      const seed = seedBox.value.trim();
-      if (!seed) return;
-      if (LE.loopState !== 'running') await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'resume' });
+      const mode = await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action });
+      if (!(mode.ok && mode.status === 200 && mode.json.ok)) return;
       LE.userHold = false;
-      LE.local = 'awaiting_assistant';
-      LE.reformatCount = 0;
-      LE.lastSig = sigOf(latestAssistant());
-      const sent = await submitToGPT(seed + '\n' + CONTRACT);
-      if (sent) seedBox.value = '';
-      else {
-        LE.local = 'idle';
-        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'seed_submit_not_confirmed' });
-      }
-    };
-    panel.querySelector('#le-pause').onclick = () => {
-      LE.userHold = true;
-      bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause' });
-    };
-    panel.querySelector('#le-resume').onclick = async () => {
-      const wasLoopStop = LE.pauseReason === 'loop_stop_requested';
       LE.local = 'idle';
-      LE.userHold = false;
-      LE.lastSig = wasLoopStop ? sigOf(latestAssistant()) : null;
       LE.reformatCount = 0;
-      await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'resume' });
-      if (wasLoopStop) {
-        const sent = await submitToGPT(CONTINUE_AFTER_STOP_MSG);
-        LE.local = sent ? 'awaiting_assistant' : 'idle';
-        if (!sent) {
-          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'continue_after_stop_submit_failed' });
+      LE.conversationMode = mode.json.conversationMode || 'armed';
+      LE.loopState = mode.json.loopState || 'running';
+      LE.armNonce = mode.json.armNonce || null;
+      LE.armExpiresAt = mode.json.armExpiresAt || 0;
+      LE.armDispatches = mode.json.armDispatches || 0;
+      LE.armMaxDispatches = mode.json.armMaxDispatches || 0;
+      LE.lastSig = sigOf(latestAssistant());
+      const seed = seedBox.value.trim();
+      if (seed) {
+        LE.local = 'awaiting_assistant';
+        const sent = await submitToGPT(seed + '\n' + contractText());
+        if (sent) seedBox.value = '';
+        else {
+          LE.local = 'idle';
+          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'seed_submit_not_confirmed' });
         }
       }
+      renderPanel();
+    }
+
+    panel.querySelector('#le-send').onclick = () => armAndMaybeSeed('arm_once');
+    panel.querySelector('#le-arm-loop').onclick = () => armAndMaybeSeed('arm_loop');
+    panel.querySelector('#le-chat').onclick = async () => {
+      LE.local = 'idle';
+      LE.userHold = true;
+      LE.lastSig = sigOf(latestAssistant());
+      LE.reformatCount = 0;
+      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat' });
+      renderPanel();
+    };
+    panel.querySelector('#le-freeze').onclick = async () => {
+      LE.local = 'idle';
+      LE.userHold = true;
+      LE.lastSig = sigOf(latestAssistant());
+      LE.reformatCount = 0;
+      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'freeze' });
+      renderPanel();
     };
     panel.querySelector('#le-approve').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'approve' }).then(() => { LE.local = 'dispatching'; });
     panel.querySelector('#le-skip').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'skip' });
@@ -735,9 +715,11 @@
     $('#le-tokenbox').style.display = LE.authRequired ? 'block' : 'none';
     $('#le-conv').textContent = LE.conversationId ? LE.conversationId.slice(0, 8) + '...' : '(none)';
     $('#le-sess').textContent = LE.codexSessionId ? LE.codexSessionId.slice(0, 8) + '...' : '-';
-    const map = { running: 'le-run', paused: 'le-warn', halted: 'le-bad' };
-    const label = { running: 'running', paused: 'paused', halted: 'halted' };
-    pill($('#le-state'), map[LE.loopState] || 'le-run', (label[LE.loopState] || LE.loopState) + (LE.loopState === 'running' ? ' - ' + LE.local : ''));
+    const modeMap = { chat: 'le-ok', armed: 'le-warn', running: 'le-run', review: 'le-run', frozen: 'le-bad' };
+    const modeText = LE.conversationMode === 'running'
+      ? 'running - ' + LE.local
+      : (LE.conversationMode || 'chat');
+    pill($('#le-state'), modeMap[LE.conversationMode] || 'le-run', modeText);
     const cap = LE.capsule;
     if (cap && cap.enabled) {
       const rootOk = /\\runs\\|\/runs\//i.test(cap.allowedWriteRoot || '') || /AegisLoopRuntime/i.test(cap.allowedWriteRoot || '');
@@ -759,13 +741,15 @@
     $('#le-bindbox').style.display = (LE.conversationId && !LE.bound && LE.bridgeOk) ? 'block' : 'none';
     $('#le-blocked').style.display = LE.blockedPayload ? 'block' : 'none';
     if (LE.blockedPayload) $('#le-blocked-rule').textContent = 'rule: ' + LE.blockedPayload.rule + ' - ' + (LE.blockedPayload.prompt || '').slice(0, 80) + '...';
-    $('#le-resume').style.display = (LE.loopState === 'paused') ? 'block' : 'none';
-    if (LE.local === 'dispatching') pill($('#le-simple'), 'le-run', 'Codex is running. Wait for result.');
+    if (LE.conversationMode === 'chat') pill($('#le-simple'), 'le-ok', 'Chat mode: automation is off.');
+    else if (LE.conversationMode === 'frozen') pill($('#le-simple'), 'le-bad', 'Frozen: this thread cannot execute.');
+    else if (LE.local === 'dispatching') pill($('#le-simple'), 'le-run', 'Codex is running. Wait for result.');
     else if (LE.local === 'inserting') pill($('#le-simple'), 'le-run', 'Sending Codex result to GPT.');
-    else if (ready) pill($('#le-simple'), 'le-ok', 'Ready: click Start loop.');
-    else if (LE.loopState === 'paused') pill($('#le-simple'), 'le-warn', 'Paused: click Continue, or add a first instruction.');
-    else pill($('#le-simple'), 'le-warn', 'No codex block yet. Add a first instruction, then start.');
-    const showSeed = !ready && LE.local !== 'dispatching' && LE.local !== 'inserting';
+    else if (ready) pill($('#le-simple'), 'le-ok', 'Armed: fresh nonce block is ready.');
+    else if (LE.conversationMode === 'armed') pill($('#le-simple'), 'le-warn', 'Armed: waiting for a fresh nonce block.');
+    else if (LE.conversationMode === 'review') pill($('#le-simple'), 'le-warn', 'Review: waiting for GPT next step with nonce.');
+    else pill($('#le-simple'), 'le-warn', 'Idle.');
+    const showSeed = LE.local !== 'dispatching' && LE.local !== 'inserting';
     $('#le-seed-label').style.display = showSeed ? 'block' : 'none';
     $('#le-seed').style.display = showSeed ? 'block' : 'none';
   }
