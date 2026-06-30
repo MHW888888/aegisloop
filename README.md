@@ -5,6 +5,15 @@
 [![Local-first](https://img.shields.io/badge/local--first-yes-blue)](#safety-model)
 [![Guarded autonomy](https://img.shields.io/badge/guarded-autonomy-purple)](#why-aegisloop)
 
+
+## Quick Demo
+
+> Static screenshot of the Chrome extension panel. No real conversation IDs, tokens, local paths, or private workspace data are shown.
+
+![AegisLoop demo](docs/assets/aegisloop-panel-demo.png)
+
+The extension panel exposes the local bridge status, briefing tools, chat mode controls, and the arm/freeze workflow used to safely start automation.
+
 > **Let ChatGPT plan a coding task while your local Codex executes it safely, one step at a time.**
 
 AegisLoop connects a ChatGPT web conversation to a local Codex session. ChatGPT decides the next step, Codex runs it in your workspace, and AegisLoop carries the result back with local safety gates, workspace locks, dedupe, and audit logs.
