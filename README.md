@@ -5,15 +5,6 @@
 [![Local-first](https://img.shields.io/badge/local--first-yes-blue)](#safety-model)
 [![Guarded autonomy](https://img.shields.io/badge/guarded-autonomy-purple)](#why-aegisloop)
 
-
-## Quick Demo
-
-> Static screenshot of the Chrome extension panel. No real conversation IDs, tokens, local paths, or private workspace data are shown.
-
-![AegisLoop demo](docs/assets/aegisloop-panel-demo.png)
-
-The extension panel exposes the local bridge status, briefing tools, chat mode controls, and the arm/freeze workflow used to safely start automation.
-
 > **Let ChatGPT plan a coding task while your local Codex executes it safely, one step at a time.**
 
 AegisLoop connects a ChatGPT web conversation to a local Codex session. ChatGPT decides the next step, Codex runs it in your workspace, and AegisLoop carries the result back with local safety gates, workspace locks, dedupe, and audit logs.
@@ -23,6 +14,14 @@ It is for people who want useful agentic loops without handing the steering whee
 > AegisLoop is a personal automation bridge. It is not an official OpenAI product.
 
 ![AegisLoop architecture](docs/architecture.svg)
+
+## Quick Demo
+
+> Static screenshot of the Chrome extension panel (General panel overview / first demo screenshot). Key runtime states (such as Start loop, Codex running, Needs approval, and Paused) will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
+
+![AegisLoop demo](docs/assets/aegisloop-panel-demo.png)
+
+The extension panel exposes the local bridge status, briefing tools, chat mode controls, and the arm/freeze workflow used to safely start automation.
 
 ## AegisLoop Lite
 
