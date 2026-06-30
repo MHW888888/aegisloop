@@ -46,6 +46,15 @@ const PORT = CONFIG.port || 17380;
 const API_TOKEN = String(CONFIG.apiToken || '').trim();
 const DEFAULT_ARM_TTL_MS = CONFIG.armTtlMs || 10 * 60 * 1000;
 const DEFAULT_ARM_LOOP_MAX_DISPATCHES = CONFIG.armLoopMaxDispatches || 12;
+const BRIEFING_TEMPLATE_VERSION = CONFIG.briefingTemplateVersion || 'briefing-1';
+const BRIEFING_TEMPLATE_DIR = path.join(ROOT, 'templates', 'briefings');
+const BRIEFING_FILES = [
+  'GPT_THREAD_BRIEF.md',
+  'CODEX_EXECUTION_BRIEF.md',
+  'RESEARCH_RULES.md',
+  'FROZEN_BRANCHES.md',
+  'CURRENT_OBJECTIVE.md',
+];
 
 function isApiAuthorized(request) {
   if (!API_TOKEN) return true;
@@ -298,6 +307,151 @@ function ensureCapsuleRuntime(conversation) {
     updatedAt: new Date().toISOString(),
   }, null, 2));
   return capsule.allowedWriteRoot;
+}
+
+function briefingHash(conversation, objective) {
+  const capsule = conversation.capsule || {};
+  return crypto.createHash('sha256').update(JSON.stringify({
+    templateVersion: BRIEFING_TEMPLATE_VERSION,
+    projectId: capsule.projectId || '',
+    activeBranch: capsule.activeBranch || '',
+    runId: capsule.runId || '',
+    objective: String(objective || '').trim(),
+  })).digest('hex').slice(0, 16);
+}
+
+function briefingPaths(conversation) {
+  const root = ensureCapsuleRuntime(conversation);
+  if (!root) return null;
+  return {
+    root,
+    inbox: path.join(root, 'inbox'),
+    meta: path.join(root, 'inbox', 'briefing.json'),
+  };
+}
+
+function renderBriefingTemplate(name, values) {
+  const file = path.join(BRIEFING_TEMPLATE_DIR, name);
+  let text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+  for (const [key, value] of Object.entries(values)) {
+    text = text.split(key).join(String(value));
+  }
+  return text;
+}
+
+function briefingValues(conversation, body) {
+  const capsule = conversation.capsule;
+  const frozen = capsule.forbiddenBranchContext.length
+    ? capsule.forbiddenBranchContext.join(', ')
+    : '(none)';
+  const objective = String(body.objective || '').trim();
+  const outputRoot = path.join(capsule.allowedWriteRoot, 'outbox');
+  return {
+    PROJECT_ID: capsule.projectId,
+    ACTIVE_BRANCH: capsule.activeBranch,
+    CURRENT_TASK: objective,
+    CURRENT_OBJECTIVE: objective,
+    FROZEN_BRANCH_OR_CONTEXT: frozen,
+    STATE_FACT_1: 'Run Capsule is enabled for ' + capsule.projectId + ' / ' + capsule.activeBranch + '.',
+    STATE_FACT_2: 'Codex must read capsule.json and inbox briefing files before execution.',
+    STATE_FACT_3: 'All artifacts must stay under allowed_write_root.',
+    INPUT_PATH_1: conversation.workspaceDir,
+    INPUT_PATH_2: path.join(capsule.allowedWriteRoot, 'inbox'),
+    OUTPUT_PATH_UNDER_ALLOWED_WRITE_ROOT: outputRoot,
+    required_output_1: 'result.md',
+    required_output_2: 'audit.csv',
+    CRITERION_1: 'Do not modify source_dir.',
+    CRITERION_2: 'Write artifacts only under allowed_write_root.',
+    CRITERION_3: 'Follow RESEARCH_RULES.md.',
+    COMMAND_1: 'node --version',
+    COMMAND_2: 'dir',
+    COMMAND_3: 'echo Add project-specific validation commands here.',
+  };
+}
+
+function materializeBriefing(conversation, body) {
+  const capsule = conversation.capsule;
+  if (!capsule || !capsule.enabled) {
+    return { ok: false, error: 'capsule_missing' };
+  }
+  const objective = String(body.objective || '').trim();
+  if (!objective) return { ok: false, error: 'objective_required' };
+
+  const paths = briefingPaths(conversation);
+  const values = briefingValues(conversation, { ...body, objective });
+  const files = [];
+  for (const name of BRIEFING_FILES) {
+    const rendered = renderBriefingTemplate(name, values);
+    fs.writeFileSync(path.join(paths.inbox, name), rendered, 'utf8');
+    files.push(name);
+  }
+
+  const meta = {
+    templateVersion: BRIEFING_TEMPLATE_VERSION,
+    conversationId: conversation.conversationId,
+    projectId: capsule.projectId,
+    activeBranch: capsule.activeBranch,
+    runId: capsule.runId,
+    objective,
+    sourceDir: conversation.workspaceDir,
+    allowedWriteRoot: capsule.allowedWriteRoot,
+    briefingHash: briefingHash(conversation, objective),
+    generatedAt: new Date().toISOString(),
+    files,
+  };
+  fs.writeFileSync(paths.meta, JSON.stringify(meta, null, 2), 'utf8');
+  audit(conversation.conversationId, { type: 'briefing_materialized', meta });
+  return {
+    ok: true,
+    briefing: getBriefingStatus(conversation),
+    gptBrief: fs.readFileSync(path.join(paths.inbox, 'GPT_THREAD_BRIEF.md'), 'utf8'),
+  };
+}
+
+function getBriefingStatus(conversation) {
+  const capsule = conversation.capsule;
+  if (!capsule || !capsule.enabled) {
+    return { status: 'unavailable', reason: 'capsule_missing' };
+  }
+  const paths = briefingPaths(conversation);
+  const required = [...BRIEFING_FILES, 'briefing.json'];
+  const missing = required.filter(name => !fs.existsSync(path.join(paths.inbox, name)));
+  if (missing.length) {
+    return {
+      status: 'missing',
+      reason: 'briefing_missing',
+      missing,
+      root: paths.root,
+      inbox: paths.inbox,
+    };
+  }
+
+  try {
+    const meta = readJson(paths.meta);
+    const expectedHash = briefingHash(conversation, meta.objective || '');
+    const stale = meta.templateVersion !== BRIEFING_TEMPLATE_VERSION
+      || meta.projectId !== capsule.projectId
+      || meta.activeBranch !== capsule.activeBranch
+      || meta.runId !== capsule.runId
+      || meta.sourceDir !== conversation.workspaceDir
+      || meta.allowedWriteRoot !== capsule.allowedWriteRoot
+      || meta.briefingHash !== expectedHash;
+    return {
+      status: stale ? 'stale' : 'ready',
+      reason: stale ? 'briefing_stale' : null,
+      root: paths.root,
+      inbox: paths.inbox,
+      meta,
+    };
+  } catch (error) {
+    return {
+      status: 'stale',
+      reason: 'briefing_meta_invalid',
+      root: paths.root,
+      inbox: paths.inbox,
+      error: String(error && error.message || error),
+    };
+  }
 }
 
 function buildCapsuleHeader(conversation) {
@@ -784,6 +938,7 @@ const server = http.createServer(async (request, response) => {
           hasPendingResult: !!(c.pendingResult && !c.pendingResult.consumed),
           blockedPayload: c.blockedPayload,
           capsule: c.capsule || null,
+          briefing: getBriefingStatus(c),
         })),
       });
     }
@@ -822,6 +977,7 @@ const server = http.createServer(async (request, response) => {
         armMaxDispatches: conversation.armMaxDispatches || 0,
         loopState: conversation.loopState,
         contractVersion: CONFIG.contractVersion,
+        briefing: getBriefingStatus(conversation),
       });
     }
 
@@ -882,6 +1038,31 @@ const server = http.createServer(async (request, response) => {
       }
 
       return sendJson(response, 400, { error: 'unknown mode action' });
+    }
+
+    if (url.pathname === '/api/briefing' && request.method === 'GET') {
+      const conversation = getConversation(url.searchParams.get('conversationId'));
+      if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const status = getBriefingStatus(conversation);
+      let gptBrief = null;
+      if (status.status === 'ready' || status.status === 'stale') {
+        const gptPath = path.join(status.inbox, 'GPT_THREAD_BRIEF.md');
+        if (fs.existsSync(gptPath)) gptBrief = fs.readFileSync(gptPath, 'utf8');
+      }
+      return sendJson(response, 200, {
+        ok: true,
+        briefing: status,
+        gptBrief,
+      });
+    }
+
+    if (url.pathname === '/api/briefing/materialize' && request.method === 'POST') {
+      const body = await readBody(request);
+      const conversation = getConversation(body.conversationId);
+      if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const result = materializeBriefing(conversation, body);
+      if (!result.ok) return sendJson(response, 400, result);
+      return sendJson(response, 200, result);
     }
 
     if (url.pathname === '/api/result' && request.method === 'GET') {

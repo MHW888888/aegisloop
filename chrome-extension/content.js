@@ -27,8 +27,8 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.2';
-  const CONTRACT_VERSION = 'le-3.2';
+  const CONTENT_VERSION = '0.3.3';
+  const CONTRACT_VERSION = 'le-3.3';
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -121,6 +121,7 @@
     pauseReason: null,
     blockedPayload: null,
     capsule: null,
+    briefing: null,
     local: 'idle',                 // idle | awaiting_assistant | dispatching | inserting
     lastSig: null,                 // signature of the assistant message already handled
     initializedLatestSig: false,
@@ -175,6 +176,7 @@
       LE.codexSessionId = r.json.codexSessionId;
       LE.workspaceDir = r.json.workspaceDir;
       LE.capsule = r.json.capsule || null;
+      LE.briefing = r.json.briefing || null;
       LE.conversationMode = r.json.conversationMode || 'chat';
       LE.armNonce = r.json.armNonce || null;
       LE.armExpiresAt = r.json.armExpiresAt || 0;
@@ -208,6 +210,26 @@
   }
   function saveApiToken(token) {
     return new Promise(res => chrome.storage.local.set({ apiToken: token || '' }, res));
+  }
+
+  async function copyText(text) {
+    if (!text) return false;
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      ta.remove();
+      return ok;
+    }
   }
 
   // ----------------------------------------------------------------------------
@@ -444,6 +466,7 @@
       LE.pauseReason = me.pauseReason;
       LE.blockedPayload = me.blockedPayload || null;
       LE.capsule = me.capsule || null;
+      LE.briefing = me.briefing || null;
       LE.conversationMode = me.conversationMode || 'chat';
       LE.armNonce = me.armNonce || null;
       LE.armExpiresAt = me.armExpiresAt || 0;
@@ -612,6 +635,12 @@
           <div class="row"><span class="k">Run</span><span id="le-cap-run" class="muted">-</span></div>
           <div class="row"><span class="k">Write root</span><span id="le-cap-root" class="muted">-</span></div>
         </div>
+        <div id="le-briefing" class="capsule">
+          <div class="row"><span class="k">Briefing</span><span id="le-brief-state" class="pill le-warn">missing</span></div>
+          <div class="row"><span class="k">Inbox</span><span id="le-brief-inbox" class="muted">-</span></div>
+          <textarea id="le-brief-objective" placeholder="Objective for GPT/Codex briefing"></textarea>
+          <div class="grid"><button id="le-brief-generate" class="go">Generate briefing</button><button id="le-brief-copy">Copy GPT brief</button></div>
+        </div>
         <div id="le-reason" class="muted"></div>
         <div id="le-bindbox" style="display:none">
           <div class="muted">Connect this ChatGPT tab to a local Codex session.</div>
@@ -650,6 +679,27 @@
       if (!s || !w) return alert('Fill Local Codex session id and workspace folder');
       await saveLocalBinding(LE.conversationId, s, w);
       LE.bound = false; await ensureRegistered(); renderPanel();
+    };
+    panel.querySelector('#le-brief-generate').onclick = async () => {
+      const objective = panel.querySelector('#le-brief-objective').value.trim();
+      if (!objective) return alert('Fill an objective for this briefing');
+      const r = await bridge('/api/briefing/materialize', 'POST', {
+        conversationId: LE.conversationId,
+        objective,
+      });
+      if (!(r.ok && r.status === 200 && r.json.ok)) {
+        return alert('Briefing generation failed: ' + ((r.json && (r.json.error || r.json.reason)) || r.error || r.status));
+      }
+      LE.briefing = r.json.briefing || null;
+      renderPanel();
+    };
+    panel.querySelector('#le-brief-copy').onclick = async () => {
+      const r = await bridge('/api/briefing?conversationId=' + encodeURIComponent(LE.conversationId), 'GET');
+      if (!(r.ok && r.status === 200 && r.json.gptBrief)) {
+        return alert('No GPT brief found. Generate briefing first.');
+      }
+      const ok = await copyText(r.json.gptBrief);
+      alert(ok ? 'GPT brief copied' : 'Copy failed');
     };
     async function armAndMaybeSeed(action) {
       const seedBox = panel.querySelector('#le-seed');
@@ -736,6 +786,14 @@
       $('#le-cap-mode').textContent = '-';
       $('#le-cap-run').textContent = '-';
       $('#le-cap-root').textContent = 'workspace';
+    }
+    const brief = LE.briefing || {};
+    const briefClass = brief.status === 'ready' ? 'le-ok'
+      : (brief.status === 'stale' ? 'le-warn' : (brief.status === 'unavailable' ? 'le-bad' : 'le-warn'));
+    pill($('#le-brief-state'), briefClass, brief.status || 'missing');
+    $('#le-brief-inbox').textContent = brief.inbox ? 'external inbox' : (brief.reason || '-');
+    if (brief.meta && brief.meta.objective && !$('#le-brief-objective').value) {
+      $('#le-brief-objective').value = brief.meta.objective;
     }
     $('#le-reason').textContent = LE.pauseReason ? ('reason: ' + LE.pauseReason) : '';
     $('#le-bindbox').style.display = (LE.conversationId && !LE.bound && LE.bridgeOk) ? 'block' : 'none';

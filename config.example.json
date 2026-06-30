@@ -1,11 +1,12 @@
 {
   "port": 17380,
-  "contractVersion": "le-3.2",
+  "contractVersion": "le-3.3",
   "apiToken": "",
   "corsAllowOrigin": "https://chatgpt.com",
   "armTtlMs": 600000,
   "armLoopMaxDispatches": 12,
   "runtimeRoot": "C:\\AegisLoopRuntime",
+  "briefingTemplateVersion": "briefing-1",
   "bindings": [
     {
       "conversationId": "YOUR_CHATGPT_CONVERSATION_ID",

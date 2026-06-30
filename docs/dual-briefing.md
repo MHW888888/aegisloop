@@ -70,6 +70,16 @@ Keep new conversations in `chat` mode by default. Arm execution only when you wa
 
 ## Step 2: Copy Briefing Templates / 第二步：复制模板
 
+In v0.3.3 and newer, the extension panel can do this for you:
+
+1. Fill **Objective for GPT/Codex briefing**.
+2. Click **Generate briefing**.
+3. Click **Copy GPT brief** and paste it into the ChatGPT runner thread.
+
+The bridge writes the local executor files under the Run Capsule `inbox`.
+
+Manual copy is still useful when you want to edit templates before running:
+
 ```powershell
 $repo = "C:\path\to\aegisloop"
 $run = "C:\AegisLoopRuntime\runs\MonsterLifecycle\SECOND_WAVE_REPAIR\run-001"

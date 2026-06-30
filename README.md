@@ -28,7 +28,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.2` adds Conversation Mode on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.3` adds Dual Briefing Materializer on top of the v0.3 Parallel Safe Mode foundation:
 
 - optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
 - explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
@@ -38,6 +38,7 @@ Version `v0.3.2` adds Conversation Mode on top of the v0.3 Parallel Safe Mode fo
 - explicit Arm one run / Arm loop buttons;
 - per-arm nonce checks so old `codex` blocks cannot be resurrected accidentally.
 - Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief.
+- the extension panel can generate Run Capsule `inbox` briefing files and copy the GPT thread brief.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
 
@@ -240,6 +241,7 @@ These files are local runtime state and are ignored by git:
 - Parallel Safe Mode: [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md)
 - Dual Briefing / 双端初始化: [docs/dual-briefing.md](docs/dual-briefing.md)
 - Briefing templates: [templates/briefings/](templates/briefings/)
+- v0.3.3 release notes: [docs/release-notes-v0.3.3.md](docs/release-notes-v0.3.3.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 中文说明
