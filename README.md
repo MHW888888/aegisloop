@@ -15,6 +15,14 @@ It is for people who want useful agentic loops without handing the steering whee
 
 ![AegisLoop architecture](docs/architecture.svg)
 
+## Quick Demo
+
+> Static screenshot of the Chrome extension panel (General panel overview / first demo screenshot). Key runtime states (such as Start loop, Codex running, Needs approval, and Paused) will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
+
+![AegisLoop demo](docs/assets/aegisloop-panel-demo.png)
+
+The extension panel exposes the local bridge status, briefing tools, chat mode controls, and the arm/freeze workflow used to safely start automation.
+
 ## AegisLoop Lite
 
 Version `v0.2.0` focuses on first-run clarity:
