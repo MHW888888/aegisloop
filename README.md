@@ -13,15 +13,15 @@ It is for people who want useful agentic loops without handing the steering whee
 
 > AegisLoop is a personal automation bridge. It is not an official OpenAI product.
 
-![AegisLoop architecture](docs/architecture.svg)
-
 ## Quick Demo
 
-> Static screenshot of the Chrome extension panel (General panel overview / first demo screenshot). Key runtime states (such as Start loop, Codex running, Needs approval, and Paused) will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
+> Static screenshot of the Chrome extension panel (general panel overview / first demo screenshot). Key runtime states such as Chat Mode, Arm one run, Codex running, Needs approval, and Frozen will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
 
 ![AegisLoop demo](docs/assets/aegisloop-panel-demo.png)
 
 The extension panel exposes the local bridge status, briefing tools, chat mode controls, and the arm/freeze workflow used to safely start automation.
+
+![AegisLoop architecture](docs/architecture.svg)
 
 ## AegisLoop Lite
 
@@ -41,11 +41,11 @@ Version `v0.3.3` adds Dual Briefing Materializer on top of the v0.3 Parallel Saf
 - optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
 - explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
 - aligned package, extension, and protocol versions;
-- Run Capsule project / branch / run / mode shown in the extension panel.
+- Run Capsule project / branch / run / mode shown in the extension panel;
 - default Chat Mode, so normal Q&A is not interpreted as automation;
 - explicit Arm one run / Arm loop buttons;
-- per-arm nonce checks so old `codex` blocks cannot be resurrected accidentally.
-- Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief.
+- per-arm nonce checks so old `codex` blocks cannot be resurrected accidentally;
+- Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief;
 - the extension panel can generate Run Capsule `inbox` briefing files and copy the GPT thread brief.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
@@ -99,7 +99,8 @@ The short path:
 
 1. Start the local bridge.
 2. Open a ChatGPT conversation.
-3. Click **Connect this chat** if needed, then **Start loop**.
+3. Keep the thread in **Chat Mode** until you are ready.
+4. Click **Arm one run** for one safe dispatch, or **Arm loop** for a bounded loop.
 
 For a step-by-step walkthrough, see [docs/first-run.md](docs/first-run.md).
 
@@ -114,6 +115,7 @@ cd aegisloop
 
 ```powershell
 Copy-Item .\config.example.json .\config.json
+npm run doctor
 ```
 
 Edit `config.json`:
@@ -123,6 +125,8 @@ Edit `config.json`:
 - `workspaceDir`: local workspace for that session.
 - `codex.bin` / `codex.args`: Node.js and Codex CLI paths.
 - optional `apiToken`: when set, the Chrome extension must send this token to use bridge APIs.
+
+Run `npm run doctor` again after editing `config.json`. It checks the common first-run mistakes without printing secrets.
 
 ### 3. Start The Bridge
 
@@ -254,19 +258,23 @@ These files are local runtime state and are ignored by git:
 
 ## 中文说明
 
-**AegisLoop** 是一个把 ChatGPT 网页对话和本地 Codex session 连接起来的本地优先自动化桥。它让 ChatGPT 负责规划，让本地 Codex 负责执行，中间加上安全闸门、运行胶囊、审计日志和显式授权。
+**AegisLoop** 是一个把 ChatGPT 网页对话和本地 Codex session 连接起来的本地优先自动化桥。ChatGPT 负责规划，本地 Codex 负责执行；AegisLoop 在中间加上安全闸门、运行胶囊、审计日志和显式授权。
 
 典型流程：
 
 ```text
-ChatGPT 规划下一步 -> AegisLoop 转发给本地 Codex -> Codex 执行并回报 -> AegisLoop 把结果贴回 ChatGPT -> ChatGPT 决定下一步
+ChatGPT 规划下一步
+  -> AegisLoop 转发给本地 Codex
+  -> Codex 本地执行并回报
+  -> AegisLoop 把结果贴回 ChatGPT
+  -> ChatGPT 决定下一步或停止
 ```
 
 关键设计：
 
 - **默认 Chat Mode**：普通问答不会触发执行。
-- **显式 Arm**：只有点 Arm one run / Arm loop 后才执行。
-- **Run Capsule**：每条执行线程绑定 project、branch、run 和 external write root，避免两个分支串线。
+- **显式 Arm**：只有点击 Arm one run / Arm loop 后才执行。
+- **Run Capsule**：每条执行线绑定 project、branch、run 和 external write root，减少支线串线。
 - **Dual Briefing**：GPT 只拿短规划简报，Codex 在本地读取完整执行简报。
 - **本地安全闸门**：越界 payload 会先被 bridge 拦截。
 - **ACK/NACK 结果确认**：结果只有成功贴回 ChatGPT 后才标记为已消费。
@@ -279,7 +287,7 @@ Runner Thread = 单一 active_branch，只执行
 Archive Thread = 冻结支线，只保留状态
 ```
 
-详细中文/英文教程见 [docs/dual-briefing.md](docs/dual-briefing.md)。
+详细中英双语教程见 [docs/dual-briefing.md](docs/dual-briefing.md)。
 
 ## Roadmap
 

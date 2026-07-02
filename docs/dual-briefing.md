@@ -1,21 +1,26 @@
 # Dual Briefing / 双端初始化
 
-Dual Briefing keeps the planner and executor from sharing the same giant prompt.
+Dual Briefing keeps the planner and executor from sharing one giant prompt.
 
-双端初始化的目标是：不要把同一份 README、研究细则、执行规则同时大段塞给 ChatGPT 和 Codex。ChatGPT 只拿规划简报，Codex 只拿执行简报，Run Capsule 负责边界。
+双端初始化的目标很简单：不要把同一份 README、研究细则、执行规则同时大段塞给 ChatGPT 和 Codex。
+
+- ChatGPT gets a short planner brief: direction, boundary, current state, and required reply format.
+- Codex gets a detailed executor brief: local paths, write rules, required outputs, and verification commands.
+- Run Capsule carries the hard run boundary: project, branch, run id, source directory, and external write root.
 
 ## The Rule / 核心规则
 
 | Side | Give it | Do not give it |
 | --- | --- | --- |
-| ChatGPT planner | project, active branch, frozen branches, current state, forbidden actions, required reply format | full local file paths, long research manuals, validation scripts |
+| ChatGPT planner | project, active branch, frozen branches, current state, forbidden actions, required reply format | full local paths, long research manuals, validation scripts |
 | Local Codex executor | source path, write root, input files, output files, rules, validation commands | vague project direction, unrelated branch history, normal Q&A |
 
 中文口诀：
 
 ```text
-GPT 聊天窗口 = Planner briefing：方向、边界、当前状态、下一步输出格式。
-Codex 执行端 = Executor briefing：本地文件、路径、规则、验证命令、输出要求。
+GPT 聊天窗口 = Planner briefing：方向、边界、当前状态、下一步输出格式
+Codex 执行端 = Executor briefing：本地文件、路径、规则、验证命令、输出要求
+Run Capsule = 运行边界：project / branch / run / source_dir / write_root
 ```
 
 ## Runtime Layout / 运行目录
@@ -68,7 +73,7 @@ In `config.json`, bind the ChatGPT conversation to one project branch:
 
 Keep new conversations in `chat` mode by default. Arm execution only when you want a fresh run.
 
-## Step 2: Copy Briefing Templates / 第二步：复制模板
+## Step 2: Generate Briefing Files / 第二步：生成简报文件
 
 In v0.3.3 and newer, the extension panel can do this for you:
 
@@ -76,7 +81,7 @@ In v0.3.3 and newer, the extension panel can do this for you:
 2. Click **Generate briefing**.
 3. Click **Copy GPT brief** and paste it into the ChatGPT runner thread.
 
-The bridge writes the local executor files under the Run Capsule `inbox`.
+The bridge writes the executor files under the Run Capsule `inbox`.
 
 Manual copy is still useful when you want to edit templates before running:
 

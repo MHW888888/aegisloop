@@ -38,7 +38,8 @@ Please keep changes aligned with the project model:
 
 ## 中文说明
 
-欢迎提 PR。这个项目优先接受小而清晰、能验证的改动。
+欢迎提交 PR。这个项目优先接受小而清晰、能验证、容易 review 的改动。
 
 请不要提交本地私有配置、日志、真实 conversation id、真实 workspace 路径或任何 token。
+
 如果你不确定某个改动是否会扩大本地执行权限，请先开 issue 讨论。

@@ -6,7 +6,8 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "check": "node --check server.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js",
+    "check": "node --check server.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js",
+    "doctor": "node scripts/doctor.js",
     "test:briefing": "node scripts/test-briefing-materializer.js"
   },
   "keywords": [
