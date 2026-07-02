@@ -66,11 +66,20 @@ function corsOrigin() {
 }
 
 function safeSegment(value, fallback) {
-  return String(value || fallback || 'default')
-    .trim()
-    .replace(/[^a-z0-9._-]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 96) || fallback || 'default';
+  const raw = String(value || fallback || 'default').normalize('NFKC').trim();
+  let out = '';
+  for (const ch of raw) {
+    if (/^[a-z0-9._-]$/i.test(ch)) out += ch;
+    else if (/\s/.test(ch) || /[<>:"/\\|?*\x00-\x1F]/.test(ch)) out += '-';
+    else out += ch;
+  }
+  out = out
+    .replace(/-+/g, '-')
+    .replace(/^[. -]+|[. -]+$/g, '')
+    .slice(0, 96);
+  if (!out) out = fallback || 'default';
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(out)) out += '-safe';
+  return out;
 }
 
 function isPathInside(child, parent) {

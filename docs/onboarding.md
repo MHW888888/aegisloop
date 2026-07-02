@@ -61,7 +61,7 @@ If you are just testing AegisLoop for the first time, you can skip Run Capsule a
 If you use the panel, click **Use starter text**. It fills:
 
 ```text
-Read the AegisLoop GPT brief above.
+Read the AegisLoop GPT brief above if present.
 This is a runner thread, not a normal Q&A thread.
 Give the smallest safe next local Codex task for the current project/branch/objective.
 If the task should stop, reply exactly <<<LOOP_STOP>>>.

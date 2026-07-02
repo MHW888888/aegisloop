@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.4';
+  const CONTENT_VERSION = '0.3.5';
   const CONTRACT_VERSION = 'le-3.3';
 
   // ----------------------------------------------------------------------------
@@ -103,7 +103,7 @@
 
   function starterSeed() {
     return [
-      'Read the AegisLoop GPT brief above.',
+      'Read the AegisLoop GPT brief above if present.',
       'This is a runner thread, not a normal Q&A thread.',
       'Give the smallest safe next local Codex task for the current project/branch/objective.',
       'If the task should stop, reply exactly <<<LOOP_STOP>>>.',

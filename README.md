@@ -36,11 +36,11 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.4` makes the first run easier to understand on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.5` makes the first run easier to understand on top of the v0.3 Parallel Safe Mode foundation:
 
 - optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
 - explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
-- aligned package, extension, and protocol versions;
+- clearer package, extension, and protocol version reporting;
 - Run Capsule project / branch / run / mode shown in the extension panel;
 - default Chat Mode, so normal Q&A is not interpreted as automation;
 - explicit Arm one run / Arm loop buttons;
@@ -48,6 +48,7 @@ Version `v0.3.4` makes the first run easier to understand on top of the v0.3 Par
 - Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief;
 - the extension panel can generate Run Capsule `inbox` briefing files and copy the GPT thread brief;
 - the panel now includes a four-step start guide and a **Use starter text** button for safer first tasks.
+- Run Capsule runtime path segments preserve Unicode project / branch / run names while still replacing unsafe path characters.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
 
@@ -259,6 +260,7 @@ These files are local runtime state and are ignored by git:
 - Briefing templates: [templates/briefings/](templates/briefings/)
 - v0.3.3 release notes: [docs/release-notes-v0.3.3.md](docs/release-notes-v0.3.3.md)
 - v0.3.4 release notes: [docs/release-notes-v0.3.4.md](docs/release-notes-v0.3.4.md)
+- v0.3.5 release notes: [docs/release-notes-v0.3.5.md](docs/release-notes-v0.3.5.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 中文说明
