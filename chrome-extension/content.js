@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.3';
+  const CONTENT_VERSION = '0.3.4';
   const CONTRACT_VERSION = 'le-3.3';
 
   // ----------------------------------------------------------------------------
@@ -98,6 +98,15 @@
       '[AegisLoop] Your last reply had no usable ```codex block.',
       'Reply with ONLY one JSON ```codex block containing arm_nonce="' + (LE.armNonce || 'ARM_NONCE_FROM_PANEL') + '" and the next instruction,',
       'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
+    ].join('\n');
+  }
+
+  function starterSeed() {
+    return [
+      'Read the AegisLoop GPT brief above.',
+      'This is a runner thread, not a normal Q&A thread.',
+      'Give the smallest safe next local Codex task for the current project/branch/objective.',
+      'If the task should stop, reply exactly <<<LOOP_STOP>>>.',
     ].join('\n');
   }
 
@@ -598,10 +607,10 @@
     panel.id = 'le-panel';
     panel.innerHTML = `
       <style>
-        #le-panel{position:fixed;right:16px;bottom:16px;z-index:2147483647;width:300px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#e6e6e6;background:#15171c;border:1px solid #2a2e37;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden}
+        #le-panel{position:fixed;right:16px;bottom:16px;z-index:2147483647;width:340px;max-height:86vh;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#e6e6e6;background:#15171c;border:1px solid #2a2e37;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden}
         #le-panel header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#1b1e25;border-bottom:1px solid #2a2e37}
         #le-panel header b{font-size:12px;letter-spacing:.3px}
-        #le-panel .body{padding:10px;display:flex;flex-direction:column;gap:8px}
+        #le-panel .body{padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(86vh - 42px);overflow:auto}
         #le-panel .row{display:flex;gap:6px;align-items:center;justify-content:space-between}
         #le-panel .k{color:#8a93a3}
         #le-panel .pill{padding:1px 7px;border-radius:999px;font-size:11px}
@@ -614,6 +623,9 @@
         #le-panel .muted{color:#8a93a3;font-size:11px}
         #le-panel .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
         #le-panel .capsule{border:1px solid #2a2e37;border-radius:8px;padding:7px;background:#11141a}
+        #le-panel .steps{margin:6px 0 0 18px;padding:0;color:#cdd4e0}
+        #le-panel .steps li{margin:2px 0}
+        #le-panel .tip{color:#8a93a3;font-size:11px;margin-top:5px}
         .le-ok{background:#16331f;color:#b6ffc8}.le-warn{background:#3a2f12;color:#ffe39a}.le-bad{background:#3a1c1f;color:#ffb4b4}.le-run{background:#13283a;color:#9fd2ff}
       </style>
       <header><b>AegisLoop <span class="muted" id="le-ver">v${CONTENT_VERSION}</span></b><button id="le-dbg" title="debug log">debug</button></header>
@@ -627,6 +639,16 @@
         <div class="row"><span class="k">ChatGPT tab</span><span id="le-conv" class="muted">-</span></div>
         <div class="row"><span class="k">Local Codex session</span><span id="le-sess" class="muted">-</span></div>
         <div class="row"><span class="k">Mode</span><span id="le-state" class="pill le-run">-</span></div>
+        <div id="le-guide" class="capsule">
+          <div class="row"><span class="k">Start here</span><span class="pill le-run">4 steps</span></div>
+          <ol class="steps">
+            <li>Run <b>npm run doctor</b> locally.</li>
+            <li>Connect this ChatGPT tab to Codex.</li>
+            <li>Generate briefing, then paste GPT brief.</li>
+            <li>Use starter text, then Arm one run.</li>
+          </ol>
+          <div class="tip">Use a dedicated runner thread. Keep normal Q&A in Chat mode or a separate chat.</div>
+        </div>
         <div id="le-capsule" class="capsule">
           <div class="row"><span class="k">Capsule</span><span id="le-capsule-state" class="pill le-warn">legacy</span></div>
           <div class="row"><span class="k">Project</span><span id="le-cap-project" class="muted">-</span></div>
@@ -655,7 +677,8 @@
         </div>
         <div id="le-simple" class="pill le-run">checking...</div>
         <div id="le-seed-label" class="muted">First instruction (optional)</div>
-        <textarea id="le-seed" placeholder="Optional: ask GPT for the next codex task after arming."></textarea>
+        <textarea id="le-seed" placeholder="Recommended: click Use starter text, then Arm one run."></textarea>
+        <button id="le-seed-starter">Use starter text</button>
         <div class="grid"><button id="le-chat">Chat mode</button><button id="le-send" class="go">Arm one run</button></div>
         <div class="grid"><button id="le-arm-loop" class="go">Arm loop</button><button id="le-freeze">Freeze</button></div>
         <button id="le-stop" class="danger" style="width:100%">Stop</button>
@@ -730,6 +753,9 @@
 
     panel.querySelector('#le-send').onclick = () => armAndMaybeSeed('arm_once');
     panel.querySelector('#le-arm-loop').onclick = () => armAndMaybeSeed('arm_loop');
+    panel.querySelector('#le-seed-starter').onclick = () => {
+      panel.querySelector('#le-seed').value = starterSeed();
+    };
     panel.querySelector('#le-chat').onclick = async () => {
       LE.local = 'idle';
       LE.userHold = true;

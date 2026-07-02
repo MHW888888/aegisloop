@@ -2,6 +2,8 @@
 
 This guide is for the first three minutes with AegisLoop.
 
+For a more practical "what should I type first?" guide, see [onboarding.md](onboarding.md).
+
 The safest mental model:
 
 ```text
@@ -54,11 +56,16 @@ Arm one run
 
 If the page has no `codex` block yet, type a short first instruction in **First instruction**, then click **Arm one run**.
 
-Example:
+Recommended first instruction:
 
 ```text
-Read the project, summarize the current state, and suggest the smallest safe next step.
+Read the AegisLoop GPT brief above.
+This is a runner thread, not a normal Q&A thread.
+Give the smallest safe next local Codex task for the current project/branch/objective.
+If the task should stop, reply exactly <<<LOOP_STOP>>>.
 ```
+
+The panel's **Use starter text** button fills this for you.
 
 ## What Success Looks Like
 

@@ -42,6 +42,8 @@ Use Chat Mode for ordinary questions.
 
 Click **Arm one run** only when you want to execute one fresh local task.
 
+If you need both normal Q&A and automation, use separate ChatGPT threads. See [onboarding.md](onboarding.md).
+
 ## No codex block yet
 
 ChatGPT must end actionable replies with a fenced `codex` block:
