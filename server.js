@@ -31,8 +31,98 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 }
 
+function configError(message) {
+  return new Error('Invalid config.json: ' + message);
+}
+
+function assertString(value, name, { optional = false } = {}) {
+  if (optional && (value === undefined || value === null || value === '')) return;
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw configError(name + ' must be a non-empty string');
+  }
+}
+
+function assertNumber(value, name, { optional = false, min = 0 } = {}) {
+  if (optional && (value === undefined || value === null)) return;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min) {
+    throw configError(name + ' must be a number >= ' + min);
+  }
+}
+
+function assertBoolean(value, name, { optional = false } = {}) {
+  if (optional && (value === undefined || value === null)) return;
+  if (typeof value !== 'boolean') throw configError(name + ' must be a boolean');
+}
+
+function validateConfig(config) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw configError('root value must be an object');
+  }
+
+  assertNumber(config.port, 'port', { optional: true, min: 1 });
+  assertString(config.contractVersion, 'contractVersion', { optional: true });
+  assertString(config.apiToken, 'apiToken', { optional: true });
+  assertString(config.corsAllowOrigin, 'corsAllowOrigin', { optional: true });
+  assertNumber(config.armTtlMs, 'armTtlMs', { optional: true, min: 1 });
+  assertNumber(config.armLoopMaxDispatches, 'armLoopMaxDispatches', { optional: true, min: 1 });
+  assertString(config.runtimeRoot, 'runtimeRoot', { optional: true });
+
+  if (!Array.isArray(config.bindings)) {
+    throw configError('bindings must be an array');
+  }
+
+  const seenConversations = new Set();
+  config.bindings.forEach((binding, index) => {
+    const prefix = 'bindings[' + index + ']';
+    if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+      throw configError(prefix + ' must be an object');
+    }
+    assertString(binding.conversationId, prefix + '.conversationId');
+    assertString(binding.codexSessionId, prefix + '.codexSessionId');
+    assertString(binding.workspaceDir, prefix + '.workspaceDir');
+    assertBoolean(binding.fullAuto, prefix + '.fullAuto', { optional: true });
+    assertString(binding.conversationMode, prefix + '.conversationMode', { optional: true });
+    if (binding.conversationMode && !['chat', 'armed', 'frozen'].includes(binding.conversationMode)) {
+      throw configError(prefix + '.conversationMode must be one of: chat, armed, frozen');
+    }
+    if (seenConversations.has(binding.conversationId)) {
+      throw configError(prefix + '.conversationId duplicates another binding');
+    }
+    seenConversations.add(binding.conversationId);
+  });
+
+  if (!config.codex || typeof config.codex !== 'object' || Array.isArray(config.codex)) {
+    throw configError('codex must be an object');
+  }
+  assertString(config.codex.bin, 'codex.bin');
+  if (!Array.isArray(config.codex.args) || config.codex.args.some(arg => typeof arg !== 'string')) {
+    throw configError('codex.args must be an array of strings');
+  }
+  assertString(config.codex.stdinFlag, 'codex.stdinFlag', { optional: true });
+  assertNumber(config.codex.timeoutMs, 'codex.timeoutMs', { optional: true, min: 1 });
+
+  if (config.denylist !== undefined) {
+    if (!Array.isArray(config.denylist)) throw configError('denylist must be an array');
+    config.denylist.forEach((rule, index) => {
+      const prefix = 'denylist[' + index + ']';
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) {
+        throw configError(prefix + ' must be an object');
+      }
+      assertString(rule.name, prefix + '.name');
+      assertString(rule.pattern, prefix + '.pattern');
+      assertString(rule.flags, prefix + '.flags', { optional: true });
+      try {
+        new RegExp(rule.pattern, rule.flags || 'i');
+      } catch (error) {
+        throw configError(prefix + '.pattern is not a valid regular expression: ' + error.message);
+      }
+    });
+  }
+}
+
 function loadConfig() {
   const config = readJson(CONFIG_PATH);
+  validateConfig(config);
   config.runtimeRoot = config.runtimeRoot || path.join(ROOT, 'runs');
   config.denylistCompiled = (config.denylist || []).map(rule => ({
     name: rule.name,
