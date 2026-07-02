@@ -27,8 +27,11 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.5';
+  const CONTENT_VERSION = '0.3.6';
   const CONTRACT_VERSION = 'le-3.3';
+  const FAST_POLL_MS = 800;
+  const IDLE_POLL_MS = 3500;
+  const DOM_NUDGE_MS = 250;
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -447,6 +450,28 @@
   // ----------------------------------------------------------------------------
   // Main loop tick
   // ----------------------------------------------------------------------------
+  let tickTimer = null;
+
+  function activeMode() {
+    return LE.conversationMode === 'armed' || LE.conversationMode === 'review' || LE.conversationMode === 'running';
+  }
+
+  function desiredPollDelay() {
+    if (!LE.conversationId || !LE.bound || !LE.bridgeOk || LE.authRequired) return IDLE_POLL_MS;
+    if (LE.local === 'dispatching' || LE.local === 'inserting' || LE.local === 'awaiting_assistant') return FAST_POLL_MS;
+    if (activeMode()) return FAST_POLL_MS;
+    return IDLE_POLL_MS;
+  }
+
+  function scheduleTick(delay) {
+    if (tickTimer) clearTimeout(tickTimer);
+    tickTimer = setTimeout(tick, delay);
+  }
+
+  function nudgeTick() {
+    if (!LE.ticking && activeMode()) scheduleTick(DOM_NUDGE_MS);
+  }
+
   async function tick() {
     if (LE.ticking) return;
     LE.ticking = true;
@@ -595,6 +620,8 @@
       log('tick error', e);
     } finally {
       LE.ticking = false;
+      renderPanel();
+      scheduleTick(desiredPollDelay());
     }
   }
 
@@ -843,8 +870,18 @@
   // ----------------------------------------------------------------------------
   buildPanel();
   loadApiToken().then(token => { LE.apiToken = token || null; });
-  setInterval(tick, 1500);
-  const mo = new MutationObserver(() => { /* nudge next tick when DOM changes */ });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
+  scheduleTick(0);
+  const mo = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (panel && panel.contains(mutation.target)) continue;
+      nudgeTick();
+      break;
+    }
+  });
+  mo.observe(document.querySelector('main') || document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
   log('content.js ready', CONTENT_VERSION);
 })();
