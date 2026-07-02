@@ -15,7 +15,7 @@ It is for people who want useful agentic loops without handing the steering whee
 
 ## Quick Demo
 
-> Static screenshot of the Chrome extension panel (general panel overview / first demo screenshot). Key runtime states such as Chat Mode, Arm one run, Codex running, Needs approval, and Frozen will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
+> Static screenshot of the Chrome extension panel (general panel overview / first demo screenshot). It is a sanitized onboarding image, so the version number and minor labels may lag behind the latest release. Key runtime states such as Chat Mode, Arm one run, Codex running, Needs approval, and Frozen will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
 
 ![AegisLoop demo](docs/assets/aegisloop-panel-demo.png)
 
