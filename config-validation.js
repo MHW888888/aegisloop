@@ -89,6 +89,7 @@ function validateConfig(config) {
   assertString(config.contractVersion, 'contractVersion', { optional: true });
   assertString(config.apiToken, 'apiToken', { optional: true });
   assertString(config.corsAllowOrigin, 'corsAllowOrigin', { optional: true });
+  assertStringArray(config.allowedOrigins, 'allowedOrigins', { optional: true });
   assertInteger(config.armTtlMs, 'armTtlMs', { optional: true, min: 1 });
   assertInteger(config.armLoopMaxDispatches, 'armLoopMaxDispatches', { optional: true, min: 1 });
   assertInteger(config.minIntervalMs, 'minIntervalMs', { optional: true, min: 0 });

@@ -3,6 +3,7 @@
   "contractVersion": "le-3.3",
   "apiToken": "",
   "corsAllowOrigin": "https://chatgpt.com",
+  "allowedOrigins": ["https://chatgpt.com", "https://chat.openai.com"],
   "armTtlMs": 600000,
   "armLoopMaxDispatches": 12,
   "runtimeRoot": "C:\\AegisLoopRuntime",

@@ -151,6 +151,31 @@ async function main() {
     const noAuth = await fetchJson(`${base}/api/conversations`);
     assert.strictEqual(noAuth.status, 401);
 
+    const badOrigin = await fetchJson(`${base}/api/conversations`, {
+      headers: {
+        'X-AegisLoop-Token': token,
+        Origin: 'https://example.com',
+      },
+    });
+    assert.strictEqual(badOrigin.status, 403);
+    assert.strictEqual(badOrigin.json.error, 'origin_not_allowed');
+
+    const chatgptOrigin = await fetchJson(`${base}/api/conversations`, {
+      headers: {
+        'X-AegisLoop-Token': token,
+        Origin: 'https://chatgpt.com',
+      },
+    });
+    assert.strictEqual(chatgptOrigin.status, 200);
+
+    const extensionOrigin = await fetchJson(`${base}/api/conversations`, {
+      headers: {
+        'X-AegisLoop-Token': token,
+        Origin: 'chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef',
+      },
+    });
+    assert.strictEqual(extensionOrigin.status, 200);
+
     const initialDispatch = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,

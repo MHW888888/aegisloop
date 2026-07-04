@@ -36,7 +36,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.11` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.12` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -58,7 +58,9 @@ Version `v0.3.11` makes the first run easier to understand and keeps the browser
 - unacknowledged Codex results block new dispatches, so a pending result cannot be overwritten;
 - successful results become hard duplicates only after ACK; failed results can be retried with a fresh arm nonce;
 - Codex timeout cleanup kills the process tree and stdout/stderr are bounded with ring buffers;
-- debug mode shows selector health for composer, send/stop controls, and latest message signatures.
+- debug mode shows selector health for composer, send/stop controls, and latest message signatures;
+- `/api/*` calls now reject unexpected browser origins while still allowing ChatGPT pages, Chrome extension requests, and no-origin localhost CLI checks;
+- CI includes a no-login ChatGPT DOM fixture check for the message-role, composer, send/stop, and rendered `codex` block assumptions.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
 
@@ -151,6 +153,7 @@ Edit `config.json`:
 - `workspaceDir`: local workspace for that session.
 - `codex.bin` / `codex.args`: Node.js and Codex CLI paths.
 - optional `apiToken`: when set, the Chrome extension must send this token to use bridge APIs.
+- optional `allowedOrigins`: extra trusted browser origins for `/api/*`; by default AegisLoop allows ChatGPT origins, Chrome extension origins, and no-origin local CLI requests.
 
 Run `npm run doctor` again after editing `config.json`. It checks the common first-run mistakes without printing secrets.
 
@@ -213,6 +216,8 @@ By default, each conversation is in **Chat Mode**. In Chat Mode, AegisLoop does 
 AegisLoop does not trust web content to decide local authority.
 
 If `apiToken` is set in `config.json`, every bridge endpoint under `/api/*` requires `X-AegisLoop-Token`. This prevents arbitrary local web pages from reading bindings or dispatching work through the bridge. Keep the token private and do not commit it.
+
+`/api/*` also checks the request `Origin`. ChatGPT pages, the Chrome extension background page, and no-origin local CLI checks are allowed by default. Other browser origins are rejected with `origin_not_allowed`.
 
 The bridge can block payloads that appear to request:
 
@@ -295,6 +300,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.9 release notes: [docs/release-notes-v0.3.9.md](docs/release-notes-v0.3.9.md)
 - v0.3.10 release notes: [docs/release-notes-v0.3.10.md](docs/release-notes-v0.3.10.md)
 - v0.3.11 release notes: [docs/release-notes-v0.3.11.md](docs/release-notes-v0.3.11.md)
+- v0.3.12 release notes: [docs/release-notes-v0.3.12.md](docs/release-notes-v0.3.12.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)

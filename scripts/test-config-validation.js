@@ -60,6 +60,12 @@ assert.strictEqual(validateConfig(example), true);
 
 {
   const config = clone(example);
+  config.allowedOrigins = ['https://chatgpt.com', 123];
+  expectInvalid(config, /allowedOrigins must be an array of strings/);
+}
+
+{
+  const config = clone(example);
   config.denylist[0].pattern = '[';
   expectInvalid(config, /not a valid regular expression/);
 }

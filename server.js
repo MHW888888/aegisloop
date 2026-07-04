@@ -63,7 +63,22 @@ function isApiAuthorized(request) {
   return request.headers['x-aegisloop-token'] === API_TOKEN;
 }
 
-function corsOrigin() {
+function configuredAllowedOrigins() {
+  const origins = new Set(['https://chatgpt.com', 'https://chat.openai.com']);
+  if (CONFIG.corsAllowOrigin) origins.add(String(CONFIG.corsAllowOrigin));
+  for (const origin of (CONFIG.allowedOrigins || [])) origins.add(String(origin));
+  return origins;
+}
+
+function isApiOriginAllowed(request) {
+  const origin = String(request.headers.origin || '').trim();
+  if (!origin) return true;
+  if (origin.startsWith('chrome-extension://')) return true;
+  return configuredAllowedOrigins().has(origin);
+}
+
+function corsOrigin(origin) {
+  if (origin && (origin.startsWith('chrome-extension://') || configuredAllowedOrigins().has(origin))) return origin;
   return CONFIG.corsAllowOrigin || 'https://chatgpt.com';
 }
 
@@ -1025,7 +1040,7 @@ function sendJson(response, code, object) {
   const body = JSON.stringify(object);
   response.writeHead(code, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': corsOrigin(),
+    'Access-Control-Allow-Origin': corsOrigin(response._aegisOrigin || ''),
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,X-AegisLoop-Token',
   });
@@ -1044,9 +1059,18 @@ function readBody(request) {
 }
 
 const server = http.createServer(async (request, response) => {
-  if (request.method === 'OPTIONS') return sendJson(response, 200, { ok: true });
-
   const url = new URL(request.url, `http://127.0.0.1:${PORT}`);
+  response._aegisOrigin = String(request.headers.origin || '').trim();
+
+  if (request.method === 'OPTIONS') {
+    if (url.pathname.startsWith('/api/') && !isApiOriginAllowed(request)) {
+      return sendJson(response, 403, {
+        error: 'origin_not_allowed',
+        message: 'Origin is not allowed to call AegisLoop APIs',
+      });
+    }
+    return sendJson(response, 200, { ok: true });
+  }
 
   try {
     if (url.pathname === '/health' && request.method === 'GET') {
@@ -1062,6 +1086,17 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, 401, {
         error: 'unauthorized',
         message: 'Missing or invalid X-AegisLoop-Token',
+      });
+    }
+    if (url.pathname.startsWith('/api/') && !isApiOriginAllowed(request)) {
+      audit('_server', {
+        type: 'origin_blocked',
+        origin: request.headers.origin || '',
+        path: url.pathname,
+      });
+      return sendJson(response, 403, {
+        error: 'origin_not_allowed',
+        message: 'Origin is not allowed to call AegisLoop APIs',
       });
     }
 

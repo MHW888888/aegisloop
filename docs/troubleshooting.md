@@ -40,6 +40,8 @@ Do not paste `/health`, `https://`, a remote host, or a URL without a port into 
 
 If the panel reports `bridge_timeout`, the page request to the local bridge took too long. Keep the ChatGPT thread open, confirm the terminal running `npm start` is still alive, and retry after `/health` responds again. AegisLoop keeps the local route state instead of silently dropping the run.
 
+If an API response says `origin_not_allowed`, a non-ChatGPT browser origin tried to call `/api/*`. Use the Chrome extension panel from a ChatGPT tab, or add a trusted origin to `allowedOrigins` in `config.json` only if you understand why that page should control the local bridge.
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.
