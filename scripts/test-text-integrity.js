@@ -83,6 +83,7 @@ const shellScripts = [
 ];
 
 const powershellScriptsThatMustStayAscii = [
+  'scripts/create-model-smoke-issues.ps1',
   'scripts/smoke-chatgpt-model-ui.ps1',
 ];
 
