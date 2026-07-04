@@ -55,6 +55,7 @@ assert.match(content, /LE\.workspaceDir = me\.workspaceDir \|\| LE\.workspaceDir
 assert.match(content, /LE\.fullAuto = me\.fullAuto !== false/, 'panel route display must refresh automation flag from bridge state');
 assert.match(content, /currentFreshReadyCodex/, 'seed submit confirmation must accept a fresh nonce codex fallback');
 assert.match(content, /seed submit not confirmed by user bubble, but fresh nonce codex block seen/, 'seed fallback must log fresh nonce codex confirmation');
-assert.match(content, /waitForFreshReadyCodex\(4000\)/, 'seed fallback must wait briefly for a fresh nonce codex block before pausing');
+assert.match(content, /SEED_FRESH_CODEX_CONFIRM_MS = 15000/, 'seed fallback must allow slow model replies before pausing');
+assert.match(content, /waitForFreshReadyCodex\(SEED_FRESH_CODEX_CONFIRM_MS\)/, 'seed fallback must use the shared fresh codex confirmation timeout');
 
 console.log('extension compatibility checks passed');

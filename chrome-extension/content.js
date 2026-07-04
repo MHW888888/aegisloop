@@ -27,12 +27,13 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.8';
+  const CONTENT_VERSION = '0.3.9';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
   const IDLE_POLL_MS = 3500;
   const DOM_NUDGE_MS = 250;
+  const SEED_FRESH_CODEX_CONFIRM_MS = 15000;
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -853,7 +854,7 @@
         const sent = await submitToGPT(seed + '\n' + contractText());
         if (sent) seedBox.value = '';
         else {
-          const ready = await waitForFreshReadyCodex(4000);
+          const ready = await waitForFreshReadyCodex(SEED_FRESH_CODEX_CONFIRM_MS);
           if (ready) {
             seedBox.value = '';
             LE.local = 'awaiting_assistant';
