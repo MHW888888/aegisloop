@@ -87,6 +87,7 @@ Rules:
 - Give only the next local Codex task.
 - Keep the task small and verifiable.
 - Do not switch projects or branches.
+- Do not call ChatGPT tools. AegisLoop reads a fenced codex JSON block from this page.
 - If this should stop, reply exactly <<<LOOP_STOP>>>.
 ```
 

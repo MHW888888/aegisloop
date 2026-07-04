@@ -77,6 +77,28 @@ Arm one run
 
 This asks ChatGPT for a fresh block with the current nonce.
 
+## Pro or reasoning mode says it cannot find the tool
+
+Some ChatGPT Pro / reasoning modes may interpret "use Codex" as a request to call a built-in ChatGPT tool. AegisLoop does not work that way.
+
+AegisLoop reads plain text from the ChatGPT page. The model only needs to write one fenced `codex` JSON block:
+
+````markdown
+```codex
+{
+  "aegisloop": true,
+  "arm_nonce": "CURRENT_NONCE_FROM_PANEL",
+  "prompt": "Read the project and summarize the safest next step. Do not modify files."
+}
+```
+````
+
+If the model says "I cannot access tools" or "no tool is available", reply with:
+
+```text
+Do not call a ChatGPT tool. AegisLoop is watching this page for a fenced codex JSON block. Reply with only one fenced codex block containing the next local Codex instruction, or <<<LOOP_STOP>>>.
+```
+
 ## codex block ignored
 
 AegisLoop ignores old blocks and blocks without the current arm nonce.

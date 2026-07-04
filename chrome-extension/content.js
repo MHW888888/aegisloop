@@ -82,6 +82,8 @@
       '',
       `[AegisLoop protocol ${CONTRACT_VERSION}]`,
       'Evaluate the Codex result above, then give the next step.',
+      'AegisLoop is NOT a built-in ChatGPT tool. Do not try to call a tool.',
+      'To use local Codex, write the next instruction as plain JSON inside a fenced ```codex block.',
       'Your reply MUST end with exactly one of these:',
       '1) one fenced ```codex block with JSON containing the current arm_nonce and the next instruction. Example:',
       '```codex',
@@ -100,6 +102,7 @@
   function reformatMsg() {
     return [
       '[AegisLoop] Your last reply had no usable fenced codex block.',
+      'AegisLoop is not a built-in ChatGPT tool. Do not call or search for tools.',
       'Reply with ONLY one JSON fenced codex block containing arm_nonce="' + (LE.armNonce || 'ARM_NONCE_FROM_PANEL') + '" and the next instruction,',
       'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
     ].join('\n');
@@ -109,6 +112,7 @@
     return [
       'Read the AegisLoop GPT brief above if present.',
       'This is a runner thread, not a normal Q&A thread.',
+      'Do not call ChatGPT tools. AegisLoop works by reading your fenced codex JSON block.',
       'Give the smallest safe next local Codex task for the current project/branch/objective.',
       'If the task should stop, reply exactly <<<LOOP_STOP>>>.',
     ].join('\n');
