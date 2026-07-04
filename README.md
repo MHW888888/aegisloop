@@ -39,6 +39,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 Version `v0.3.7` makes the first run easier to understand and keeps the browser-to-bridge loop lighter on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
+- Windows and macOS CI checks for the local setup scripts and core bridge tests;
 - optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
 - explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
 - clearer package, extension, and protocol version reporting;

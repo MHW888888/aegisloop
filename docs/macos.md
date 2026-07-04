@@ -4,6 +4,8 @@ This guide shows the macOS path for running AegisLoop locally.
 
 It mirrors the Windows flow, but uses Terminal commands, POSIX paths, `curl`, and the macOS Chrome extension UI.
 
+The repository check workflow runs `npm run check` on both `windows-latest` and `macos-latest`, so the documented macOS path has a basic CI guard.
+
 ## What You Need
 
 - macOS with Terminal access

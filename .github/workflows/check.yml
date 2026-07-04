@@ -8,7 +8,12 @@ on:
 
 jobs:
   node-check:
-    runs-on: windows-latest
+    name: node-check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
