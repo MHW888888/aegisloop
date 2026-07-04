@@ -38,12 +38,30 @@ gh --version
 
 If you do not use Homebrew, install the LTS version from the Node.js download page. The npm documentation recommends using the Node.js installer on macOS and choosing the LTS release.
 
-## 2. Clone AegisLoop
+## 2. Fast Preflight
+
+Clone AegisLoop:
 
 ```sh
 git clone https://github.com/MHW888888/aegisloop.git
 cd aegisloop
 ```
+
+Then run the macOS helper:
+
+```sh
+chmod +x scripts/setup-macos.sh
+npm run setup:mac
+```
+
+The helper:
+
+- checks Node.js, npm, git, and optional GitHub CLI;
+- creates `config.json` if missing;
+- runs `npm run doctor`;
+- prints the exact next steps.
+
+It does not install packages, read tokens, or change your GitHub account.
 
 ## 3. Create Local Config
 
@@ -155,6 +173,27 @@ Use **Arm loop** only after one-run works and the thread has a clear stop condit
 
 ## 7. macOS Troubleshooting
 
+### I got it working, but setup took a long time
+
+This usually means one of the local ids or paths was unclear. Run:
+
+```sh
+npm run setup:mac
+npm run doctor
+```
+
+Then check only these fields first:
+
+```text
+conversationId
+codexSessionId
+workspaceDir
+codex.bin
+codex.args
+```
+
+Do not start with Run Capsule, Arm loop, or multiple ChatGPT threads. First prove one **Arm one run** on one simple workspace.
+
 ### `node` is not found
 
 Close and reopen Terminal after installing Node.js, then run:
@@ -222,8 +261,8 @@ macOS 上最短路径：
 brew install node gh
 git clone https://github.com/MHW888888/aegisloop.git
 cd aegisloop
-cp config.example.json config.json
-npm run doctor
+chmod +x scripts/setup-macos.sh
+npm run setup:mac
 npm start
 curl http://127.0.0.1:17380/health
 ```

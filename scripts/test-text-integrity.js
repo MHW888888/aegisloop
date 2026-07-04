@@ -61,15 +61,31 @@ for (const relative of textFiles) {
   }
 }
 
+const shellScripts = [
+  'scripts/start-bridge.sh',
+  'scripts/setup-macos.sh',
+];
+
+for (const relative of shellScripts) {
+  const text = read(relative);
+  if (!text.startsWith('#!/usr/bin/env sh\n')) {
+    fail(`${relative} must start with a POSIX sh shebang and LF newline`);
+  }
+  if (text.includes('\r')) {
+    fail(`${relative} must use LF line endings for macOS/Linux`);
+  }
+}
+
 const macStart = read('scripts/start-bridge.sh');
-if (!macStart.startsWith('#!/usr/bin/env sh\n')) {
-  fail('scripts/start-bridge.sh must start with a POSIX sh shebang and LF newline');
-}
-if (macStart.includes('\r')) {
-  fail('scripts/start-bridge.sh must use LF line endings for macOS/Linux');
-}
 if (!macStart.includes('exec node server.js')) {
   fail('scripts/start-bridge.sh should exec node server.js');
+}
+
+const macSetup = read('scripts/setup-macos.sh');
+for (const expected of ['npm run doctor', 'config.example.json', 'npm start', 'chrome://extensions']) {
+  if (!macSetup.includes(expected)) {
+    fail(`scripts/setup-macos.sh should mention ${expected}`);
+  }
 }
 
 if (!process.exitCode) {
