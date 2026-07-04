@@ -1,13 +1,14 @@
 {
   "name": "aegisloop",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": false,
   "description": "A simpler guarded bridge where ChatGPT plans and local Codex executes safely.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "check": "node --check server.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-unicode-runtime.js && node scripts/test-briefing-materializer.js && node scripts/test-unicode-runtime.js",
+    "check": "node --check server.js && node --check config-validation.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-config-validation.js && node --check scripts/test-unicode-runtime.js && node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-unicode-runtime.js",
     "doctor": "node scripts/doctor.js",
+    "test:config": "node scripts/test-config-validation.js",
     "test:briefing": "node scripts/test-briefing-materializer.js",
     "test:unicode": "node scripts/test-unicode-runtime.js"
   },

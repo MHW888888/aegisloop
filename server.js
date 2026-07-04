@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { validateConfig } = require('./config-validation');
 
 const ROOT = __dirname;
 const CONFIG_PATH = path.join(ROOT, 'config.json');
@@ -33,6 +34,7 @@ function readJson(file) {
 
 function loadConfig() {
   const config = readJson(CONFIG_PATH);
+  validateConfig(config);
   config.runtimeRoot = config.runtimeRoot || path.join(ROOT, 'runs');
   config.denylistCompiled = (config.denylist || []).map(rule => ({
     name: rule.name,

@@ -36,8 +36,9 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.6` makes the first run easier to understand and keeps the browser-to-bridge loop lighter on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.7` makes the first run easier to understand and keeps the browser-to-bridge loop lighter on top of the v0.3 Parallel Safe Mode foundation:
 
+- startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
 - explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
 - clearer package, extension, and protocol version reporting;
@@ -263,6 +264,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.4 release notes: [docs/release-notes-v0.3.4.md](docs/release-notes-v0.3.4.md)
 - v0.3.5 release notes: [docs/release-notes-v0.3.5.md](docs/release-notes-v0.3.5.md)
 - v0.3.6 release notes: [docs/release-notes-v0.3.6.md](docs/release-notes-v0.3.6.md)
+- v0.3.7 release notes: [docs/release-notes-v0.3.7.md](docs/release-notes-v0.3.7.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
