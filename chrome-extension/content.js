@@ -373,6 +373,23 @@
     return parsed && parsed.prompt && canDispatchParsed(parsed) ? { assistant: a, parsed } : null;
   }
 
+  function currentFreshReadyCodex() {
+    const ready = currentReadyCodex();
+    if (!ready) return null;
+    const sig = sigOf(ready.assistant);
+    return sig && sig !== LE.lastSig ? ready : null;
+  }
+
+  async function waitForFreshReadyCodex(timeoutMs) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      const ready = currentFreshReadyCodex();
+      if (ready) return ready;
+      await sleep(500);
+    }
+    return null;
+  }
+
   function canDispatchParsed(parsed) {
     if (!parsed || !parsed.prompt) return false;
     if (!['armed', 'review'].includes(LE.conversationMode)) return false;
@@ -836,8 +853,16 @@
         const sent = await submitToGPT(seed + '\n' + contractText());
         if (sent) seedBox.value = '';
         else {
-          LE.local = 'idle';
-          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'seed_submit_not_confirmed' });
+          const ready = await waitForFreshReadyCodex(4000);
+          if (ready) {
+            seedBox.value = '';
+            LE.local = 'awaiting_assistant';
+            log('seed submit not confirmed by user bubble, but fresh nonce codex block seen');
+            scheduleTick(DOM_NUDGE_MS);
+          } else {
+            LE.local = 'idle';
+            await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'seed_submit_not_confirmed' });
+          }
         }
       }
       renderPanel();

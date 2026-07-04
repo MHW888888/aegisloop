@@ -53,5 +53,8 @@ assert.match(content, /keep this route and ask it for a visible codex JSON block
 assert.match(content, /LE\.codexSessionId = me\.codexSessionId \|\| LE\.codexSessionId/, 'panel route display must refresh Codex session id from bridge state');
 assert.match(content, /LE\.workspaceDir = me\.workspaceDir \|\| LE\.workspaceDir/, 'panel route display must refresh workspace from bridge state');
 assert.match(content, /LE\.fullAuto = me\.fullAuto !== false/, 'panel route display must refresh automation flag from bridge state');
+assert.match(content, /currentFreshReadyCodex/, 'seed submit confirmation must accept a fresh nonce codex fallback');
+assert.match(content, /seed submit not confirmed by user bubble, but fresh nonce codex block seen/, 'seed fallback must log fresh nonce codex confirmation');
+assert.match(content, /waitForFreshReadyCodex\(4000\)/, 'seed fallback must wait briefly for a fresh nonce codex block before pausing');
 
 console.log('extension compatibility checks passed');
