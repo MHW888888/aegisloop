@@ -36,7 +36,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.9` makes the first run easier to understand and keeps the browser-to-bridge loop lighter on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.10` makes the first run easier to understand and keeps the browser-to-bridge loop lighter on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -52,7 +52,7 @@ Version `v0.3.9` makes the first run easier to understand and keeps the browser-
 - the panel now includes a four-step start guide and a **Use starter text** button for safer first tasks.
 - Run Capsule runtime path segments preserve Unicode project / branch / run names while still replacing unsafe path characters.
 - the extension now uses adaptive polling: faster checks while a run is active, slower checks while idle, and a DOM-change nudge when ChatGPT posts a new message.
-- macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back but a fresh nonce `codex` block appears, AegisLoop keeps the route armed and dispatches instead of falling back to Chat Mode. The confirmation window now waits long enough for slower model replies before pausing.
+- macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back, AegisLoop stays armed and waits for a fresh nonce `codex` block instead of falling back to Chat Mode. This is friendlier to slower 5.5 / Ultra reasoning replies while keeping the nonce gate intact.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
 
@@ -287,6 +287,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.7 release notes: [docs/release-notes-v0.3.7.md](docs/release-notes-v0.3.7.md)
 - v0.3.8 release notes: [docs/release-notes-v0.3.8.md](docs/release-notes-v0.3.8.md)
 - v0.3.9 release notes: [docs/release-notes-v0.3.9.md](docs/release-notes-v0.3.9.md)
+- v0.3.10 release notes: [docs/release-notes-v0.3.10.md](docs/release-notes-v0.3.10.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)

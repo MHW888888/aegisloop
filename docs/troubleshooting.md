@@ -77,6 +77,8 @@ Arm one run
 
 This asks ChatGPT for a fresh block with the current nonce.
 
+If the panel says the seed send was not confirmed but still armed, do not reconnect the thread. AegisLoop is keeping the current route alive while waiting for a fresh nonce `codex` block. This can happen with slower 5.5 / Ultra reasoning replies or when ChatGPT's page DOM does not expose the sent user-message bubble quickly.
+
 ## Pro or reasoning mode says it cannot find the tool
 
 Some ChatGPT Pro / reasoning modes may interpret "use Codex" as a request to call a built-in ChatGPT tool. AegisLoop does not work that way.

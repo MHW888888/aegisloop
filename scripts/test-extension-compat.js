@@ -57,5 +57,9 @@ assert.match(content, /currentFreshReadyCodex/, 'seed submit confirmation must a
 assert.match(content, /seed submit not confirmed by user bubble, but fresh nonce codex block seen/, 'seed fallback must log fresh nonce codex confirmation');
 assert.match(content, /SEED_FRESH_CODEX_CONFIRM_MS = 15000/, 'seed fallback must allow slow model replies before pausing');
 assert.match(content, /waitForFreshReadyCodex\(SEED_FRESH_CODEX_CONFIRM_MS\)/, 'seed fallback must use the shared fresh codex confirmation timeout');
+assert.match(content, /seedSubmitUnconfirmed/, 'seed fallback must expose an unconfirmed-but-armed state');
+assert.match(content, /still armed and waiting until arm TTL/, 'seed fallback must tell users it is still armed');
+assert.match(content, /seed submit not confirmed; staying armed until arm TTL or manual Chat Mode/, 'seed fallback must keep waiting instead of failing to chat');
+assert.doesNotMatch(content, /reason:\s*'seed_submit_not_confirmed'/, 'seed fallback must not automatically switch back to Chat Mode');
 
 console.log('extension compatibility checks passed');

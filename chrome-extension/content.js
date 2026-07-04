@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.9';
+  const CONTENT_VERSION = '0.3.10';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -150,6 +150,7 @@
     initializedLatestSig: false,
     prevAssistantText: '',
     reformatCount: 0,              // bounded re-prompts since last real progress
+    seedSubmitUnconfirmed: false,
     debug: false,
     ticking: false,
     userHold: false,               // true after a manual Pause, blocks auto-resume
@@ -574,6 +575,7 @@
 
       if (LE.conversationMode === 'chat' || LE.conversationMode === 'frozen') {
         LE.local = 'idle';
+        LE.seedSubmitUnconfirmed = false;
         return;
       }
 
@@ -632,6 +634,7 @@
 
       if (parsed && parsed.stop) {
         LE.lastSig = sig;
+        LE.seedSubmitUnconfirmed = false;
         await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'loop_stop_requested' });
         log('GPT requested LOOP_STOP -> chat mode');
         return;
@@ -644,6 +647,7 @@
           armNonce: parsed.armNonce,
         });
         LE.lastSig = sig;
+        LE.seedSubmitUnconfirmed = false;
         if (d.ok && d.json.status === 'accepted') {
           LE.local = 'dispatching';
           LE.reformatCount = 0;
@@ -841,6 +845,7 @@
       LE.userHold = false;
       LE.local = 'idle';
       LE.reformatCount = 0;
+      LE.seedSubmitUnconfirmed = false;
       LE.conversationMode = mode.json.conversationMode || 'armed';
       LE.loopState = mode.json.loopState || 'running';
       LE.armNonce = mode.json.armNonce || null;
@@ -858,11 +863,14 @@
           if (ready) {
             seedBox.value = '';
             LE.local = 'awaiting_assistant';
+            LE.seedSubmitUnconfirmed = false;
             log('seed submit not confirmed by user bubble, but fresh nonce codex block seen');
             scheduleTick(DOM_NUDGE_MS);
           } else {
-            LE.local = 'idle';
-            await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'seed_submit_not_confirmed' });
+            LE.local = 'awaiting_assistant';
+            LE.seedSubmitUnconfirmed = true;
+            log('seed submit not confirmed; staying armed until arm TTL or manual Chat Mode');
+            scheduleTick(FAST_POLL_MS);
           }
         }
       }
@@ -877,6 +885,7 @@
     panel.querySelector('#le-chat').onclick = async () => {
       LE.local = 'idle';
       LE.userHold = true;
+      LE.seedSubmitUnconfirmed = false;
       LE.lastSig = sigOf(latestAssistant());
       LE.reformatCount = 0;
       await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat' });
@@ -885,6 +894,7 @@
     panel.querySelector('#le-freeze').onclick = async () => {
       LE.local = 'idle';
       LE.userHold = true;
+      LE.seedSubmitUnconfirmed = false;
       LE.lastSig = sigOf(latestAssistant());
       LE.reformatCount = 0;
       await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'freeze' });
@@ -940,11 +950,16 @@
     if (brief.meta && brief.meta.objective && !$('#le-brief-objective').value) {
       $('#le-brief-objective').value = brief.meta.objective;
     }
-    $('#le-reason').textContent = LE.bridgeError ? ('bridge: ' + String(LE.bridgeError).slice(0, 120)) : (LE.pauseReason ? ('reason: ' + LE.pauseReason) : '');
+    $('#le-reason').textContent = LE.bridgeError
+      ? ('bridge: ' + String(LE.bridgeError).slice(0, 120))
+      : (LE.seedSubmitUnconfirmed && activeMode()
+        ? 'Seed send was not confirmed; still armed and waiting until arm TTL.'
+        : (LE.pauseReason ? ('reason: ' + LE.pauseReason) : ''));
     $('#le-bindbox').style.display = (LE.conversationId && !LE.bound && LE.bridgeOk) ? 'block' : 'none';
     $('#le-blocked').style.display = LE.blockedPayload ? 'block' : 'none';
     if (LE.blockedPayload) $('#le-blocked-rule').textContent = 'rule: ' + LE.blockedPayload.rule + ' - ' + (LE.blockedPayload.prompt || '').slice(0, 80) + '...';
-    if (LE.conversationMode === 'chat') pill($('#le-simple'), 'le-ok', 'Chat mode: automation is off.');
+    if (LE.seedSubmitUnconfirmed && activeMode()) pill($('#le-simple'), 'le-warn', 'Seed unconfirmed: still armed, waiting for fresh nonce block.');
+    else if (LE.conversationMode === 'chat') pill($('#le-simple'), 'le-ok', 'Chat mode: automation is off.');
     else if (LE.conversationMode === 'frozen') pill($('#le-simple'), 'le-bad', 'Frozen: this thread cannot execute.');
     else if (LE.local === 'dispatching') pill($('#le-simple'), 'le-run', 'Codex is running. Wait for result.');
     else if (LE.local === 'inserting') pill($('#le-simple'), 'le-run', 'Sending Codex result to GPT.');
