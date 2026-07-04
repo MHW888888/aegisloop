@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.12';
+  const CONTENT_VERSION = '0.3.13';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -36,6 +36,7 @@
   const SEED_FRESH_CODEX_CONFIRM_MS = 15000;
   const CONTENT_BRIDGE_TIMEOUT_MS = 10000;
   const NO_CODEX_GRACE_MS = 5000;
+  const LEADER_HEARTBEAT_MS = 5000;
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -128,6 +129,7 @@
   // State
   // ----------------------------------------------------------------------------
   const LE = {
+    clientId: loadClientId(),
     conversationId: null,
     bound: false,
     codexSessionId: null,
@@ -157,12 +159,26 @@
     needsProtocolFix: false,
     seedSubmitUnconfirmed: false,
     selectorHealth: null,
+    leaderLease: null,
+    lastLeaderHeartbeatAt: 0,
     debug: false,
     ticking: false,
     userHold: false,               // true after a manual Pause, blocks auto-resume
   };
   const MAX_REFORMAT = 3;
   function log(...a) { if (LE.debug) console.log('%c[LE]', 'color:#0a0', ...a); }
+
+  function loadClientId() {
+    try {
+      const existing = sessionStorage.getItem('aegisloopClientId');
+      if (existing) return existing;
+      const id = 'tab-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2));
+      sessionStorage.setItem('aegisloopClientId', id);
+      return id;
+    } catch (e) {
+      return 'tab-' + String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+    }
+  }
 
   function resetProtocolRecovery() {
     LE.reformatCount = 0;
@@ -194,6 +210,8 @@
     LE.seedSubmitUnconfirmed = false;
     LE.userHold = false;
     LE.selectorHealth = null;
+    LE.leaderLease = null;
+    LE.lastLeaderHeartbeatAt = 0;
     log('conversation route changed; transient state reset', id);
   }
 
@@ -252,10 +270,11 @@
       return;
     }
     if (id !== LE.conversationId) resetTransientForConversation(id);
-    if (id === LE.conversationId && LE.bound) return;
+    if (id === LE.conversationId && LE.bound && Date.now() - LE.lastLeaderHeartbeatAt < LEADER_HEARTBEAT_MS) return;
     const stored = await loadLocalBinding(id);
     const r = await bridge('/api/register', 'POST', {
       conversationId: id,
+      clientId: LE.clientId,
       codexSessionId: stored && stored.codexSessionId,
       workspaceDir: stored && stored.workspaceDir,
     });
@@ -272,6 +291,8 @@
       LE.armMaxDispatches = r.json.armMaxDispatches || 0;
       LE.bridgeOk = true;
       LE.authRequired = false;
+      LE.leaderLease = r.json.leaderLease || null;
+      LE.lastLeaderHeartbeatAt = Date.now();
       log('registered', id, '->', LE.codexSessionId, LE.workspaceDir);
     } else if (r.ok && r.status === 409) {
       LE.bound = false;            // unknown conversation, fill Codex Session ID in the panel
@@ -304,6 +325,18 @@
   }
   function saveBridgeUrl(url) {
     return new Promise(res => chrome.storage.local.set({ bridgeUrl: url || DEFAULT_BRIDGE_URL }, res));
+  }
+  function resultStorageKey(resultId) {
+    return 'insertedResult:' + (LE.conversationId || 'none') + ':' + resultId;
+  }
+  function wasResultInserted(resultId) {
+    if (!resultId) return Promise.resolve(false);
+    const key = resultStorageKey(resultId);
+    return new Promise(res => chrome.storage.local.get([key], o => res(!!o[key])));
+  }
+  function markResultInserted(resultId) {
+    if (!resultId) return Promise.resolve();
+    return new Promise(res => chrome.storage.local.set({ [resultStorageKey(resultId)]: Date.now() }, res));
   }
   function normalizeBridgeUrlForPanel(value) {
     const raw = String(value || DEFAULT_BRIDGE_URL).trim();
@@ -368,7 +401,12 @@
   }
   function isStreaming() { return !!SEL.stopButton(); }
 
-  function sigOf(a) { return a ? `${a.count}|${a.text.length}|${djb2(a.text.slice(-120))}` : null; }
+  function sigOf(a) {
+    if (!a) return null;
+    const blocks = Array.isArray(a.codeBlocks) ? a.codeBlocks.join('\0') : '';
+    const full = `${a.role || 'assistant'}\0${a.text || ''}\0${blocks}`;
+    return `${a.count}|${full.length}|${djb2(full)}`;
+  }
   function djb2(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h >>> 0; }
 
   function selectorHealth() {
@@ -551,22 +589,18 @@
   }
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const normPrefix = (t) => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 24);
-  const containsMarker = (text, marker) => {
-    const a = String(text || '').replace(/\s+/g, ' ').trim();
-    const b = String(marker || '').replace(/\s+/g, ' ').trim();
-    if (!a || !b) return false;
-    return a.includes(b.slice(0, 12)) || b.includes(a.slice(0, 12));
-  };
+  const msgIdLine = (id) => `[aegisloop_msg_id:${id}]`;
 
   // Send to GPT and CONFIRM by reading back a new matching user message.
   // We do NOT gate on "composer is empty" - ChatGPT clears its own composer on
   // a successful send; if a cosmetic draft remains we tidy it but never fail on it.
   async function submitToGPT(text) {
-    const marker = normPrefix(text);
+    const msgId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+    const marker = msgIdLine(msgId);
+    const outgoing = `${text}\n\n${marker}`;
     for (let attempt = 0; attempt < 2; attempt++) {
       const before = userMsgCount();
-      if (!setComposerText(text)) return false;
+      if (!setComposerText(outgoing)) return false;
       await sleep(150);
       clickSend();
       const t0 = Date.now();
@@ -574,10 +608,10 @@
         await sleep(500);
         const users = SEL.messages().filter(m => m.role === 'user');
         if (users.length > before) {
-          const lastUser = normPrefix(users[users.length - 1].text);
-          if (!marker || containsMarker(lastUser, marker)) {
+          const lastUser = users[users.length - 1].text || '';
+          if (lastUser.includes(marker)) {
             if (composerText()) clearComposer();   // best-effort tidy, not required
-            log('submit confirmed (new user message seen)');
+            log('submit confirmed (aegisloop_msg_id seen)');
             return true;
           }
         }
@@ -673,13 +707,27 @@
         if (rr.ok && rr.json.hasResult) {
           const result = rr.json.result;
           log('got codex result, inserting to GPT', result.jobId, 'ok=', result.ok);
+          if (result.resultId && await wasResultInserted(result.resultId)) {
+            await bridge('/api/result/ack', 'POST', {
+              conversationId: LE.conversationId,
+              clientId: LE.clientId,
+              jobId: result.jobId,
+              resultId: result.resultId,
+            });
+            LE.local = 'awaiting_assistant';
+            resetProtocolRecovery();
+            return;
+          }
           LE.local = 'inserting';
           const payload = result.finalMessage + '\n' + contractText();
           const sent = await submitToGPT(payload);
           if (sent) {
+            if (result.resultId) await markResultInserted(result.resultId);
             await bridge('/api/result/ack', 'POST', {
               conversationId: LE.conversationId,
+              clientId: LE.clientId,
               jobId: result.jobId,
+              resultId: result.resultId,
             });
             LE.local = 'awaiting_assistant';
             resetProtocolRecovery();
@@ -688,7 +736,9 @@
             LE.local = 'idle';
             await bridge('/api/result/nack', 'POST', {
               conversationId: LE.conversationId,
+              clientId: LE.clientId,
               jobId: result.jobId,
+              resultId: result.resultId,
               reason: 'result_insert_failed',
             });
             log('insert failed -> paused for human');
@@ -715,7 +765,7 @@
         LE.lastSig = sig;
         LE.seedSubmitUnconfirmed = false;
         resetProtocolRecovery();
-        await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'loop_stop_requested' });
+        await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'chat', reason: 'loop_stop_requested' });
         log('GPT requested LOOP_STOP -> chat mode');
         return;
       }
@@ -723,6 +773,7 @@
       if (parsed && parsed.prompt && canDispatchParsed(parsed)) {
         const d = await bridge('/api/dispatch', 'POST', {
           conversationId: LE.conversationId,
+          clientId: LE.clientId,
           prompt: parsed.prompt,
           armNonce: parsed.armNonce,
         });
@@ -737,7 +788,7 @@
           log('conversation already has an active dispatch, waiting result');
         } else if (d.ok && d.json.status === 'duplicate') {
           LE.local = 'idle';
-          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'duplicate_payload' });
+          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'chat', reason: 'duplicate_payload' });
           log('duplicate payload -> paused for human');
         } else if (d.ok && (d.json.status === 'blocked' || d.json.status === 'not_running')) {
           log('dispatch blocked/not_running:', d.json);
@@ -769,13 +820,13 @@
         else {
           LE.local = 'idle';
           LE.needsProtocolFix = true;
-          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'reformat_submit_failed' });
+          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'pause', reason: 'reformat_submit_failed' });
         }
       } else {
         LE.lastSig = sig;
         LE.local = 'idle';
         LE.needsProtocolFix = true;
-        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'needs_user_protocol_fix' });
+        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'pause', reason: 'needs_user_protocol_fix' });
         log('no codex block and reformat budget spent -> protocol fix needed');
       }
       return;
@@ -922,6 +973,7 @@
       if (!objective) return alert('Fill an objective for this briefing');
       const r = await bridge('/api/briefing/materialize', 'POST', {
         conversationId: LE.conversationId,
+        clientId: LE.clientId,
         objective,
       });
       if (!(r.ok && r.status === 200 && r.json.ok)) {
@@ -940,7 +992,7 @@
     };
     async function armAndMaybeSeed(action) {
       const seedBox = panel.querySelector('#le-seed');
-      const mode = await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action });
+      const mode = await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action });
       if (!(mode.ok && mode.status === 200 && mode.json.ok)) return;
       LE.userHold = false;
       LE.local = 'idle';
@@ -988,7 +1040,7 @@
       LE.seedSubmitUnconfirmed = false;
       LE.lastSig = sigOf(latestAssistant());
       resetProtocolRecovery();
-      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat' });
+      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'chat' });
       renderPanel();
     };
     panel.querySelector('#le-freeze').onclick = async () => {
@@ -997,15 +1049,15 @@
       LE.seedSubmitUnconfirmed = false;
       LE.lastSig = sigOf(latestAssistant());
       resetProtocolRecovery();
-      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'freeze' });
+      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'freeze' });
       renderPanel();
     };
-    panel.querySelector('#le-approve').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'approve' }).then(() => { LE.local = 'dispatching'; });
-    panel.querySelector('#le-skip').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'skip' });
+    panel.querySelector('#le-approve').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'approve' }).then(() => { LE.local = 'dispatching'; });
+    panel.querySelector('#le-skip').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'skip' });
     panel.querySelector('#le-stop').onclick = () => { panel.querySelector('#le-confirm').style.display = 'block'; };
     panel.querySelector('#le-stop-no').onclick = () => { panel.querySelector('#le-confirm').style.display = 'none'; };
     panel.querySelector('#le-stop-yes').onclick = async () => {
-      await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'stop', confirmed: true });
+      await bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'stop', confirmed: true });
       panel.querySelector('#le-confirm').style.display = 'none';
     };
   }

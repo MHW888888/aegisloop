@@ -6,6 +6,10 @@
   "allowedOrigins": ["https://chatgpt.com", "https://chat.openai.com"],
   "armTtlMs": 600000,
   "armLoopMaxDispatches": 12,
+  "leaderLeaseMs": 15000,
+  "maxBodyBytes": 1048576,
+  "outputBufferChars": 1048576,
+  "debugAuditRaw": false,
   "runtimeRoot": "C:\\AegisLoopRuntime",
   "briefingTemplateVersion": "briefing-1",
   "bindings": [

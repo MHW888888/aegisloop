@@ -33,6 +33,9 @@ assert.match(content, /aria-label\*="Stop"/, 'content must keep a stop-button se
 assert.match(content, /currentFreshReadyCodex/, 'content must detect fresh nonce codex blocks');
 assert.match(content, /arm_nonce/, 'content must require arm nonce in the protocol path');
 assert.match(content, /Selector health/, 'panel must expose selector health for real screenshots');
+assert.match(content, /aegisloop_msg_id/, 'content must use unique message ids for submit confirmation');
+assert.match(content, /resultId/, 'content must handle stable result ids for ACK/NACK');
+assert.match(content, /clientId/, 'content must identify the active browser tab to the bridge');
 
 const roleMatches = [...fixture.matchAll(/data-message-author-role="([^"]+)"/g)].map(match => match[1]);
 assert.deepStrictEqual(roleMatches, ['user', 'assistant']);

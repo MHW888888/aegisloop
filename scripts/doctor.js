@@ -56,7 +56,7 @@ function checkConfig() {
   if (config.apiToken) {
     mark('ok', 'apiToken', 'configured; value hidden');
   } else {
-    mark('warn', 'apiToken', 'empty; strong warning: use only for a private throwaway localhost test');
+    mark('warn', 'apiToken', 'empty; /api/* is fail-closed unless AEGISLOOP_ALLOW_NO_TOKEN=1 is set for a local throwaway test');
   }
 
   if (config.runtimeRoot && !isPlaceholder(config.runtimeRoot)) {

@@ -36,7 +36,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.12` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.13` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -60,9 +60,13 @@ Version `v0.3.12` makes the first run easier to understand and keeps the browser
 - Codex timeout cleanup kills the process tree and stdout/stderr are bounded with ring buffers;
 - debug mode shows selector health for composer, send/stop controls, and latest message signatures;
 - `/api/*` calls now reject unexpected browser origins while still allowing ChatGPT pages, Chrome extension requests, and no-origin localhost CLI checks;
-- CI includes a no-login ChatGPT DOM fixture check for the message-role, composer, send/stop, and rendered `codex` block assumptions.
+- CI includes a no-login ChatGPT DOM fixture check for the message-role, composer, send/stop, and rendered `codex` block assumptions;
+- each ChatGPT tab gets a local `clientId`, and the bridge gives one active tab a short leader lease per conversation so duplicate tabs cannot both arm, dispatch, ACK, or NACK the same route;
+- Codex results now carry a stable `resultId`, making result ACK idempotent and preventing page refreshes from inserting the same result twice;
+- ChatGPT submit confirmation uses a unique `aegisloop_msg_id` line instead of weak text-prefix matching;
+- API request bodies are capped, dispatch nonce checks require the exact `armNonce` field, audit logs redact raw prompts/results by default, and corrupt `state.json` files can recover from `.bak` instead of silently resetting.
 
-`/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
+`/health` stays public for local checks. Bridge APIs under `/api/*` are fail-closed unless you configure `apiToken`, or explicitly set `AEGISLOOP_ALLOW_NO_TOKEN=1` for a throwaway local test.
 
 ## Why AegisLoop
 
@@ -152,7 +156,7 @@ Edit `config.json`:
 - `codexSessionId`: local Codex session id to resume.
 - `workspaceDir`: local workspace for that session.
 - `codex.bin` / `codex.args`: Node.js and Codex CLI paths.
-- optional `apiToken`: when set, the Chrome extension must send this token to use bridge APIs.
+- `apiToken`: recommended for normal use. Without it, `/api/*` is blocked unless you explicitly start the bridge with `AEGISLOOP_ALLOW_NO_TOKEN=1` for a throwaway local test.
 - optional `allowedOrigins`: extra trusted browser origins for `/api/*`; by default AegisLoop allows ChatGPT origins, Chrome extension origins, and no-origin local CLI requests.
 
 Run `npm run doctor` again after editing `config.json`. It checks the common first-run mistakes without printing secrets.
@@ -169,7 +173,7 @@ Check health:
 Invoke-RestMethod http://127.0.0.1:17380/health
 ```
 
-If you set `apiToken`, save the same token in the extension panel when prompted.
+Save the same `apiToken` in the extension panel when prompted.
 
 If you change the bridge port from the default `17380`, also update **Local bridge URL** in the extension panel, for example `http://127.0.0.1:17400`.
 
@@ -215,7 +219,7 @@ By default, each conversation is in **Chat Mode**. In Chat Mode, AegisLoop does 
 
 AegisLoop does not trust web content to decide local authority.
 
-If `apiToken` is set in `config.json`, every bridge endpoint under `/api/*` requires `X-AegisLoop-Token`. This prevents arbitrary local web pages from reading bindings or dispatching work through the bridge. Keep the token private and do not commit it.
+Every bridge endpoint under `/api/*` should be protected by `X-AegisLoop-Token`. This prevents arbitrary local web pages from reading bindings or dispatching work through the bridge. Keep the token private and do not commit it. If `apiToken` is empty, AegisLoop rejects `/api/*` by default unless `AEGISLOOP_ALLOW_NO_TOKEN=1` is set for a local throwaway test.
 
 `/api/*` also checks the request `Origin`. ChatGPT pages, the Chrome extension background page, and no-origin local CLI checks are allowed by default. Other browser origins are rejected with `origin_not_allowed`.
 
@@ -235,8 +239,10 @@ For parallel research runs, Run Capsules can also block ambiguous stage labels u
 Codex results use an explicit ACK flow:
 
 - `GET /api/result` returns a pending result without consuming it.
-- `POST /api/result/ack` marks it consumed only after the extension confirms ChatGPT received the result.
+- `POST /api/result/ack` marks it consumed only after the extension confirms ChatGPT received the result. ACK includes `resultId`, so repeated ACKs are safe.
 - `POST /api/result/nack` keeps it pending and pauses the loop when insertion fails.
+
+The active browser tab also uses a short leader lease. If the same ChatGPT conversation is open in two tabs, only the current leader can arm, dispatch, ACK, or NACK. Close the duplicate tab or wait for the lease to expire if you see `leader_conflict`.
 
 You can intentionally auto-approve selected low-risk gate rules:
 
@@ -301,6 +307,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.10 release notes: [docs/release-notes-v0.3.10.md](docs/release-notes-v0.3.10.md)
 - v0.3.11 release notes: [docs/release-notes-v0.3.11.md](docs/release-notes-v0.3.11.md)
 - v0.3.12 release notes: [docs/release-notes-v0.3.12.md](docs/release-notes-v0.3.12.md)
+- v0.3.13 release notes: [docs/release-notes-v0.3.13.md](docs/release-notes-v0.3.13.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)

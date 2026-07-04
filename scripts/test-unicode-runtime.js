@@ -57,6 +57,7 @@ async function main() {
   const runId = `run-${zh(0x4e2d, 0x6587)}-001`;
   const objective = `${chinesePath} smoke objective`;
   const token = 'test-token';
+  const clientId = 'client-unicode-runtime';
   const port = await freePort();
 
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'aegisloop-'));
@@ -145,7 +146,7 @@ async function main() {
         'Content-Type': 'application/json',
         'X-AegisLoop-Token': token,
       },
-      body: JSON.stringify({ conversationId: 'test-conv', objective }),
+      body: JSON.stringify({ conversationId: 'test-conv', clientId, objective }),
     });
     assert.strictEqual(materialized.status, 200);
     assert.strictEqual(materialized.json.ok, true);

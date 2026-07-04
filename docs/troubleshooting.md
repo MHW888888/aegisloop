@@ -42,6 +42,19 @@ If the panel reports `bridge_timeout`, the page request to the local bridge took
 
 If an API response says `origin_not_allowed`, a non-ChatGPT browser origin tried to call `/api/*`. Use the Chrome extension panel from a ChatGPT tab, or add a trusted origin to `allowedOrigins` in `config.json` only if you understand why that page should control the local bridge.
 
+If an API response says `unauthorized`, set `apiToken` in `config.json`, restart the bridge, and save the same token in the extension panel. `/health` stays public, but `/api/*` is fail-closed unless a token is configured or you explicitly start a throwaway local test with:
+
+```powershell
+$env:AEGISLOOP_ALLOW_NO_TOKEN="1"
+npm start
+```
+
+Do not use no-token mode for a normal long-running setup.
+
+If an API response says `payload_too_large`, the request body exceeded the local bridge limit. This usually means a browser bug, pasted oversized payload, or accidental API misuse. Keep the task brief and retry from the panel.
+
+If an API response says `leader_conflict`, the same ChatGPT conversation is probably open in another tab. AegisLoop only allows one active tab to arm, dispatch, ACK, or NACK a conversation at a time. Close the duplicate tab or wait about 15 seconds for the old leader lease to expire.
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.
@@ -83,6 +96,8 @@ This asks ChatGPT for a fresh block with the current nonce.
 
 If the panel says the seed send was not confirmed but still armed, do not reconnect the thread. AegisLoop is keeping the current route alive while waiting for a fresh nonce `codex` block. This can happen with slower 5.5 / Ultra reasoning replies or when ChatGPT's page DOM does not expose the sent user-message bubble quickly.
 
+AegisLoop now appends a unique `aegisloop_msg_id` line to its own protocol messages so it can confirm the exact user bubble. Do not manually copy that id into another thread.
+
 ## Pro or reasoning mode says it cannot find the tool
 
 Some ChatGPT Pro / reasoning modes may interpret "use Codex" as a request to call a built-in ChatGPT tool. AegisLoop does not work that way.
@@ -116,6 +131,18 @@ Try:
 1. Click **Arm one run** again.
 2. Ask ChatGPT to resend only one fresh `codex` block.
 3. Avoid using a runner thread for normal Q&A after arming it.
+
+Putting the nonce somewhere inside the prompt text is not enough. The JSON block must include the current nonce as `arm_nonce` or `armNonce`.
+
+## Result appears twice
+
+Modern AegisLoop builds attach a `resultId` to each Codex result and remember which result ids were inserted into ChatGPT. If a result still appears twice:
+
+1. confirm the panel version is current;
+2. avoid opening the same ChatGPT conversation in two tabs;
+3. check debug logs for `leader_conflict`, `resultId mismatch`, or `already_acked`.
+
+Repeated ACK is safe; repeated insertion usually means an old extension build or two tabs were active at the same time.
 
 ## Needs approval
 

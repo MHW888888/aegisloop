@@ -151,7 +151,7 @@ You should see a small JSON response.
 5. Open your bound ChatGPT conversation.
 6. Hard refresh the page.
 
-If your `config.json` has `apiToken`, enter the same token in the extension panel.
+Enter the same `apiToken` from `config.json` in the extension panel when prompted. For a throwaway local test only, you can start the bridge with `AEGISLOOP_ALLOW_NO_TOKEN=1`, but normal macOS setups should use a token.
 
 ## 6. First Safe Run
 

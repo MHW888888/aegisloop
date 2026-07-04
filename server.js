@@ -24,6 +24,7 @@ const { validateConfig } = require('./config-validation');
 const ROOT = __dirname;
 const CONFIG_PATH = path.join(ROOT, 'config.json');
 const STATE_PATH = path.join(ROOT, 'state.json');
+const STATE_BAK_PATH = STATE_PATH + '.bak';
 const LOG_DIR = path.join(ROOT, 'logs');
 
 fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -46,8 +47,11 @@ function loadConfig() {
 let CONFIG = loadConfig();
 const PORT = CONFIG.port || 17380;
 const API_TOKEN = String(CONFIG.apiToken || '').trim();
+const ALLOW_NO_TOKEN = process.env.AEGISLOOP_ALLOW_NO_TOKEN === '1';
 const DEFAULT_ARM_TTL_MS = CONFIG.armTtlMs || 10 * 60 * 1000;
 const DEFAULT_ARM_LOOP_MAX_DISPATCHES = CONFIG.armLoopMaxDispatches || 12;
+const DEFAULT_LEADER_LEASE_MS = CONFIG.leaderLeaseMs || 15000;
+const MAX_BODY_BYTES = CONFIG.maxBodyBytes || 1024 * 1024;
 const BRIEFING_TEMPLATE_VERSION = CONFIG.briefingTemplateVersion || 'briefing-1';
 const BRIEFING_TEMPLATE_DIR = path.join(ROOT, 'templates', 'briefings');
 const BRIEFING_FILES = [
@@ -59,7 +63,7 @@ const BRIEFING_FILES = [
 ];
 
 function isApiAuthorized(request) {
-  if (!API_TOKEN) return true;
+  if (!API_TOKEN) return ALLOW_NO_TOKEN;
   return request.headers['x-aegisloop-token'] === API_TOKEN;
 }
 
@@ -145,6 +149,8 @@ function defaultConversation(binding) {
     ackedHashes: [],
     failedHashes: [],
     executedHashes: [],
+    ackedResultIds: [],
+    leaderLease: null,
     consecutiveFailures: 0,
     lastJobId: null,
     turn: 0,
@@ -172,6 +178,7 @@ function ensureHashBuckets(conversation) {
   if (!conversation) return;
   if (!Array.isArray(conversation.attemptedHashes)) conversation.attemptedHashes = [];
   if (!Array.isArray(conversation.failedHashes)) conversation.failedHashes = [];
+  if (!Array.isArray(conversation.ackedResultIds)) conversation.ackedResultIds = [];
   if (!Array.isArray(conversation.ackedHashes)) {
     conversation.ackedHashes = Array.isArray(conversation.executedHashes)
       ? [...conversation.executedHashes]
@@ -184,12 +191,80 @@ function hasUnconsumedPendingResult(conversation) {
   return !!(conversation && conversation.pendingResult && !conversation.pendingResult.consumed);
 }
 
+function normalizeClientId(value) {
+  const id = String(value || '').trim();
+  return /^[a-zA-Z0-9._:-]{8,120}$/.test(id) ? id : '';
+}
+
+function ensureLeaderLease(conversation, clientId, now = Date.now()) {
+  const normalized = normalizeClientId(clientId);
+  if (!normalized) {
+    return { ok: false, status: 'leader_required', message: 'clientId required' };
+  }
+  const current = conversation.leaderLease;
+  if (!current || !current.clientId || Number(current.expiresAt || 0) <= now || current.clientId === normalized) {
+    conversation.leaderLease = {
+      clientId: normalized,
+      expiresAt: now + DEFAULT_LEADER_LEASE_MS,
+      updatedAt: now,
+    };
+    conversation.updatedAt = now;
+    saveState();
+    return { ok: true, leaderLease: conversation.leaderLease };
+  }
+  return {
+    ok: false,
+    status: 'leader_conflict',
+    leaderClientId: current.clientId,
+    leaderExpiresAt: current.expiresAt,
+  };
+}
+
+function requireLeader(conversation, clientId) {
+  const lease = ensureLeaderLease(conversation, clientId);
+  if (lease.ok) return null;
+  return lease;
+}
+
+function resultIdFor(result) {
+  const hash = crypto.createHash('sha256')
+    .update([
+      result.jobId || '',
+      String(result.turn || ''),
+      result.hash || '',
+      result.ok ? 'ok' : 'fail',
+      String(result.finalMessage || ''),
+    ].join('\0'))
+    .digest('hex')
+    .slice(0, 16);
+  return 'res_' + hash;
+}
+
+function ensurePendingResultId(conversation) {
+  if (!conversation || !conversation.pendingResult) return null;
+  if (!conversation.pendingResult.resultId) {
+    conversation.pendingResult.resultId = resultIdFor(conversation.pendingResult);
+  }
+  return conversation.pendingResult.resultId;
+}
+
 function loadState() {
   try {
     STATE = readJson(STATE_PATH);
     if (!STATE.conversations) STATE.conversations = {};
-  } catch {
-    STATE = { conversations: {} };
+  } catch (stateError) {
+    if (fs.existsSync(STATE_PATH)) {
+      const bad = STATE_PATH + '.bad.' + Date.now();
+      try { fs.renameSync(STATE_PATH, bad); } catch {}
+      console.warn(`[bridge] state.json was invalid and moved aside: ${path.basename(bad)}`);
+    }
+    try {
+      STATE = readJson(STATE_BAK_PATH);
+      if (!STATE.conversations) STATE.conversations = {};
+      console.warn('[bridge] restored state from state.json.bak');
+    } catch {
+      STATE = { conversations: {} };
+    }
   }
 
   for (const binding of (CONFIG.bindings || [])) {
@@ -213,7 +288,9 @@ function loadState() {
     if (!Object.prototype.hasOwnProperty.call(existing, 'armExpiresAt')) existing.armExpiresAt = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armMaxDispatches')) existing.armMaxDispatches = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armDispatches')) existing.armDispatches = 0;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'leaderLease')) existing.leaderLease = null;
     ensureHashBuckets(existing);
+    ensurePendingResultId(existing);
   }
 }
 
@@ -223,6 +300,9 @@ function saveState() {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     const tmp = STATE_PATH + '.tmp';
+    if (fs.existsSync(STATE_PATH)) {
+      try { fs.copyFileSync(STATE_PATH, STATE_BAK_PATH); } catch {}
+    }
     fs.writeFileSync(tmp, JSON.stringify(STATE, null, 2));
     fs.renameSync(tmp, STATE_PATH);
   }, 120);
@@ -232,11 +312,44 @@ function getConversation(id) {
   return STATE.conversations[id];
 }
 
+function redactString(text) {
+  return String(text || '')
+    .replace(/github_pat_[A-Za-z0-9_]+/g, '[redacted_github_pat]')
+    .replace(/\b(api[_-]?key|token|authorization)\b\s*[:=]\s*["']?[^"'\s]+/gi, '$1=[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]');
+}
+
+function summarizeRawText(text) {
+  const raw = String(text || '');
+  return {
+    redacted: true,
+    length: raw.length,
+    sha256: crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16),
+  };
+}
+
+function sanitizeAudit(value, key) {
+  if (!CONFIG.debugAuditRaw && ['prompt', 'finalMessage'].includes(key)) {
+    return summarizeRawText(value);
+  }
+  if (typeof value === 'string') return redactString(value);
+  if (Array.isArray(value)) return value.map(item => sanitizeAudit(item, key));
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [childKey, childValue] of Object.entries(value)) {
+      out[childKey] = sanitizeAudit(childValue, childKey);
+    }
+    return out;
+  }
+  return value;
+}
+
 function audit(conversationId, event) {
+  const safeEvent = sanitizeAudit(event || {}, '');
   const line = JSON.stringify({
     ts: new Date().toISOString(),
     conversationId,
-    ...event,
+    ...safeEvent,
   }) + '\n';
   fs.appendFile(path.join(LOG_DIR, conversationId + '.jsonl'), line, () => {});
 }
@@ -786,7 +899,7 @@ function prepareDispatch(conversation, prompt, armNonce) {
     };
   }
   const providedNonce = String(armNonce || '');
-  if (providedNonce !== conversation.armNonce && !String(prompt).includes(conversation.armNonce)) {
+  if (providedNonce !== conversation.armNonce) {
     audit(conversation.conversationId, {
       type: 'mode_blocked',
       rule: 'missing_or_stale_arm_nonce',
@@ -921,6 +1034,7 @@ async function runDispatchAsync(conversation, prompt, hash) {
         consumed: false,
         at: Date.now(),
       };
+      ensurePendingResultId(conversation);
       audit(conversation.conversationId, {
         type: 'codex_done',
         turn,
@@ -952,6 +1066,7 @@ async function runDispatchAsync(conversation, prompt, hash) {
       consumed: false,
       at: Date.now(),
     };
+    ensurePendingResultId(conversation);
     audit(conversation.conversationId, {
       type: 'codex_failed',
       turn,
@@ -1022,6 +1137,7 @@ async function forceExecute(conversation, prompt) {
     consumed: false,
     at: Date.now(),
   };
+  ensurePendingResultId(conversation);
   if (conversation.activeDispatchHash === hash) conversation.activeDispatchHash = null;
   conversation.updatedAt = Date.now();
   saveState();
@@ -1048,13 +1164,28 @@ function sendJson(response, code, object) {
 }
 
 function readBody(request) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     let data = '';
-    request.on('data', chunk => { data += chunk; });
+    let size = 0;
+    let tooLarge = false;
+    request.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        tooLarge = true;
+        return;
+      }
+      data += chunk;
+    });
     request.on('end', () => {
+      if (tooLarge) {
+        const error = new Error('payload_too_large');
+        error.statusCode = 413;
+        return reject(error);
+      }
       if (!data) return resolve({});
       try { resolve(JSON.parse(data)); } catch { resolve({}); }
     });
+    request.on('error', reject);
   });
 }
 
@@ -1119,6 +1250,8 @@ const server = http.createServer(async (request, response) => {
           lastJobId: c.lastJobId,
           activeDispatchHash: c.activeDispatchHash || null,
           hasPendingResult: !!(c.pendingResult && !c.pendingResult.consumed),
+          pendingResultId: c.pendingResult && !c.pendingResult.consumed ? ensurePendingResultId(c) : null,
+          leaderLease: c.leaderLease || null,
           blockedPayload: c.blockedPayload,
           capsule: c.capsule || null,
           briefing: getBriefingStatus(c),
@@ -1146,6 +1279,7 @@ const server = http.createServer(async (request, response) => {
         });
         saveState();
       }
+      const leader = body.clientId ? ensureLeaderLease(conversation, body.clientId) : null;
 
       return sendJson(response, 200, {
         conversationId: conversation.conversationId,
@@ -1161,6 +1295,8 @@ const server = http.createServer(async (request, response) => {
         loopState: conversation.loopState,
         contractVersion: CONFIG.contractVersion,
         briefing: getBriefingStatus(conversation),
+        leaderLease: conversation.leaderLease || null,
+        leader: leader ? !!leader.ok : false,
       });
     }
 
@@ -1168,6 +1304,8 @@ const server = http.createServer(async (request, response) => {
       const body = await readBody(request);
       const conversation = getConversation(body.conversationId);
       if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const leaderError = requireLeader(conversation, body.clientId);
+      if (leaderError) return sendJson(response, 409, leaderError);
       if (typeof body.prompt !== 'string' || !body.prompt.trim()) {
         return sendJson(response, 400, { error: 'prompt required' });
       }
@@ -1183,6 +1321,8 @@ const server = http.createServer(async (request, response) => {
       const body = await readBody(request);
       const conversation = getConversation(body.conversationId);
       if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const leaderError = requireLeader(conversation, body.clientId);
+      if (leaderError) return sendJson(response, 409, leaderError);
 
       if (body.action === 'chat') {
         setChatMode(conversation, body.reason || 'chat_mode');
@@ -1243,6 +1383,8 @@ const server = http.createServer(async (request, response) => {
       const body = await readBody(request);
       const conversation = getConversation(body.conversationId);
       if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const leaderError = requireLeader(conversation, body.clientId);
+      if (leaderError) return sendJson(response, 409, leaderError);
       const result = materializeBriefing(conversation, body);
       if (!result.ok) return sendJson(response, 400, result);
       return sendJson(response, 200, result);
@@ -1254,6 +1396,17 @@ const server = http.createServer(async (request, response) => {
 
       if (conversation.pendingResult && !conversation.pendingResult.consumed) {
         const result = conversation.pendingResult;
+        const resultId = ensurePendingResultId(conversation);
+        if (conversation.ackedResultIds && conversation.ackedResultIds.includes(resultId)) {
+          conversation.pendingResult.consumed = true;
+          conversation.updatedAt = Date.now();
+          saveState();
+          return sendJson(response, 200, {
+            hasResult: false,
+            loopState: conversation.loopState,
+            pauseReason: conversation.pauseReason,
+          });
+        }
         return sendJson(response, 200, {
           hasResult: true,
           result,
@@ -1272,8 +1425,24 @@ const server = http.createServer(async (request, response) => {
       const body = await readBody(request);
       const conversation = getConversation(body.conversationId);
       if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const leaderError = requireLeader(conversation, body.clientId);
+      if (leaderError) return sendJson(response, 409, leaderError);
       if (!conversation.pendingResult || conversation.pendingResult.consumed) {
+        if (body.resultId && conversation.ackedResultIds && conversation.ackedResultIds.includes(body.resultId)) {
+          return sendJson(response, 200, { ok: true, status: 'already_acked', hasPendingResult: false });
+        }
         return sendJson(response, 409, { error: 'no pending result' });
+      }
+      const pendingResultId = ensurePendingResultId(conversation);
+      if (!body.resultId) return sendJson(response, 400, { error: 'resultId required' });
+      if (body.resultId !== pendingResultId) {
+        if (conversation.ackedResultIds && conversation.ackedResultIds.includes(body.resultId)) {
+          return sendJson(response, 200, { ok: true, status: 'already_acked', hasPendingResult: false });
+        }
+        return sendJson(response, 409, {
+          error: 'resultId mismatch',
+          pendingResultId,
+        });
       }
       if (body.jobId && body.jobId !== conversation.pendingResult.jobId) {
         return sendJson(response, 409, {
@@ -1290,6 +1459,7 @@ const server = http.createServer(async (request, response) => {
       } else if (ackedResult.hash) {
         rememberHash(conversation, 'failedHashes', ackedResult.hash);
       }
+      rememberHash(conversation, 'ackedResultIds', pendingResultId, 1000);
       conversation.pendingResult.consumed = true;
       if (remainingDispatches(conversation) > 0 && conversation.armNonce && Date.now() <= conversation.armExpiresAt) {
         conversation.conversationMode = 'review';
@@ -1321,8 +1491,18 @@ const server = http.createServer(async (request, response) => {
       const body = await readBody(request);
       const conversation = getConversation(body.conversationId);
       if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const leaderError = requireLeader(conversation, body.clientId);
+      if (leaderError) return sendJson(response, 409, leaderError);
       if (!conversation.pendingResult || conversation.pendingResult.consumed) {
         return sendJson(response, 409, { error: 'no pending result' });
+      }
+      const pendingResultId = ensurePendingResultId(conversation);
+      if (!body.resultId) return sendJson(response, 400, { error: 'resultId required' });
+      if (body.resultId !== pendingResultId) {
+        return sendJson(response, 409, {
+          error: 'resultId mismatch',
+          pendingResultId,
+        });
       }
       if (body.jobId && body.jobId !== conversation.pendingResult.jobId) {
         return sendJson(response, 409, {
@@ -1355,6 +1535,8 @@ const server = http.createServer(async (request, response) => {
       const body = await readBody(request);
       const conversation = getConversation(body.conversationId);
       if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const leaderError = requireLeader(conversation, body.clientId);
+      if (leaderError) return sendJson(response, 409, leaderError);
 
       if (body.action === 'pause') {
         conversation.loopState = 'paused';
@@ -1433,6 +1615,12 @@ const server = http.createServer(async (request, response) => {
 
     return sendJson(response, 404, { error: 'not found', path: url.pathname });
   } catch (error) {
+    if (error && error.statusCode === 413) {
+      return sendJson(response, 413, {
+        error: 'payload_too_large',
+        maxBodyBytes: MAX_BODY_BYTES,
+      });
+    }
     audit('_server', {
       type: 'handler_error',
       path: url.pathname,

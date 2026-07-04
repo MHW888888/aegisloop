@@ -92,8 +92,12 @@ function validateConfig(config) {
   assertStringArray(config.allowedOrigins, 'allowedOrigins', { optional: true });
   assertInteger(config.armTtlMs, 'armTtlMs', { optional: true, min: 1 });
   assertInteger(config.armLoopMaxDispatches, 'armLoopMaxDispatches', { optional: true, min: 1 });
+  assertInteger(config.leaderLeaseMs, 'leaderLeaseMs', { optional: true, min: 1000 });
   assertInteger(config.minIntervalMs, 'minIntervalMs', { optional: true, min: 0 });
   assertInteger(config.maxResultChars, 'maxResultChars', { optional: true, min: 1 });
+  assertInteger(config.maxBodyBytes, 'maxBodyBytes', { optional: true, min: 1024 });
+  assertInteger(config.outputBufferChars, 'outputBufferChars', { optional: true, min: 4096 });
+  assertBoolean(config.debugAuditRaw, 'debugAuditRaw', { optional: true });
   assertString(config.runtimeRoot, 'runtimeRoot', { optional: true });
   assertString(config.briefingTemplateVersion, 'briefingTemplateVersion', { optional: true });
   assertString(config.feishuWebhook, 'feishuWebhook', { optional: true });

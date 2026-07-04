@@ -72,6 +72,18 @@ assert.match(content, /needs_user_protocol_fix/, 'protocol repair exhaustion mus
 assert.match(content, /Selector health/, 'panel must expose selector health');
 assert.match(content, /selectorHealth/, 'content must compute selector health');
 assert.doesNotMatch(content, /action:\s*'chat'[\s\S]{0,120}assistant_missing_codex/, 'missing codex recovery must not silently switch to Chat Mode');
+assert.match(content, /loadClientId/, 'content must create a per-tab client id');
+assert.match(content, /sessionStorage\.getItem\('aegisloopClientId'\)/, 'client id must be tab/session scoped');
+assert.match(content, /LEADER_HEARTBEAT_MS = 5000/, 'leader lease must have a 5s heartbeat cadence');
+assert.match(content, /lastLeaderHeartbeatAt/, 'content must renew the leader lease while the tab stays active');
+assert.match(content, /leaderLease = r\.json\.leaderLease/, 'content must store bridge leader lease state');
+assert.match(content, /clientId: LE\.clientId/, 'content must send clientId on bridge writes');
+assert.match(content, /aegisloop_msg_id/, 'submit confirmation must use a unique message id');
+assert.doesNotMatch(content, /containsMarker/, 'submit confirmation must not rely on weak prefix matching');
+assert.match(content, /wasResultInserted/, 'content must remember inserted result ids');
+assert.match(content, /markResultInserted/, 'content must mark result ids before acking');
+assert.match(content, /resultId: result\.resultId/, 'result ACK/NACK must include resultId');
+assert.match(content, /codeBlocks\.join\('\\0'\)/, 'assistant signature must include rendered code blocks');
 
 assert.match(server, /pending_result_exists/, 'server must block new dispatches while a result is pending');
 assert.match(server, /ackedHashes/, 'server must separate acked hashes from attempts');
@@ -80,5 +92,18 @@ assert.match(server, /attemptedHashes/, 'server must track attempted hashes sepa
 assert.match(server, /taskkill/, 'server must kill process trees on Windows timeouts');
 assert.match(server, /codex_timeout_kill_tree/, 'server must audit process-tree timeout cleanup');
 assert.match(server, /createOutputBuffer/, 'server must use bounded stdout/stderr buffers');
+assert.match(server, /leaderLease/, 'server must track leader lease per conversation');
+assert.match(server, /leader_conflict/, 'server must reject non-leader writes');
+assert.match(server, /resultIdFor/, 'server must generate stable result ids');
+assert.match(server, /already_acked/, 'result ACK must be idempotent');
+assert.match(server, /MAX_BODY_BYTES/, 'server must cap API request bodies');
+assert.match(server, /payload_too_large/, 'server must return structured large-body errors');
+assert.match(server, /ALLOW_NO_TOKEN/, 'server must make no-token mode explicit');
+assert.match(server, /AEGISLOOP_ALLOW_NO_TOKEN/, 'server must require an explicit env opt-out for no-token API use');
+assert.match(server, /debugAuditRaw/, 'audit raw text must be debug-gated');
+assert.match(server, /STATE_BAK_PATH/, 'server must keep a state backup');
+assert.match(server, /STATE_PATH \+ '\.bad\.'/, 'server must quarantine corrupt state files');
+assert.match(server, /providedNonce !== conversation\.armNonce/, 'dispatch nonce must match body armNonce exactly');
+assert.doesNotMatch(server, /prompt\)\.includes\(conversation\.armNonce\)/, 'dispatch must not accept nonce only because it appears in prompt text');
 
 console.log('extension compatibility checks passed');
