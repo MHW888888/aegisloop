@@ -50,5 +50,8 @@ assert.match(content, /tool-availability disclaimer/, 'contract must prevent Pro
 assert.match(content, /Pro or reasoning model/, 'starter text must handle Pro/reasoning modes');
 assert.match(content, /Switching GPT models keeps the same Codex route/, 'panel must explain model switching is route-neutral');
 assert.match(content, /keep this route and ask it for a visible codex JSON block/, 'panel must tell users not to reconnect after Pro model tool disclaimers');
+assert.match(content, /LE\.codexSessionId = me\.codexSessionId \|\| LE\.codexSessionId/, 'panel route display must refresh Codex session id from bridge state');
+assert.match(content, /LE\.workspaceDir = me\.workspaceDir \|\| LE\.workspaceDir/, 'panel route display must refresh workspace from bridge state');
+assert.match(content, /LE\.fullAuto = me\.fullAuto !== false/, 'panel route display must refresh automation flag from bridge state');
 
 console.log('extension compatibility checks passed');

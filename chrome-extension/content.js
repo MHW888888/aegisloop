@@ -540,6 +540,9 @@
       LE.authRequired = false;
       const me = (cs.json.conversations || []).find(c => c.conversationId === LE.conversationId);
       if (!me) { LE.bound = false; return; }
+      LE.codexSessionId = me.codexSessionId || LE.codexSessionId;
+      LE.workspaceDir = me.workspaceDir || LE.workspaceDir;
+      LE.fullAuto = me.fullAuto !== false;
       LE.loopState = me.loopState;
       LE.pauseReason = me.pauseReason;
       LE.blockedPayload = me.blockedPayload || null;
