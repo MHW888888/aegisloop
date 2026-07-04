@@ -23,6 +23,12 @@ npm run doctor
 powershell -NoProfile -ExecutionPolicy Bypass -File .\launch.ps1
 ```
 
+On macOS, follow [macos.md](macos.md) and start the bridge with:
+
+```sh
+npm start
+```
+
 Check that the bridge is alive:
 
 ```powershell

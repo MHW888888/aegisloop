@@ -110,6 +110,12 @@ For a step-by-step walkthrough, see [docs/first-run.md](docs/first-run.md).
 
 If you are asking "what should I type first?", use the [Onboarding Playbook](docs/onboarding.md).
 
+On macOS, use the dedicated [macOS setup guide](docs/macos.md). The short bridge command is:
+
+```sh
+npm start
+```
+
 ### 1. Clone
 
 ```powershell
@@ -256,6 +262,7 @@ These files are local runtime state and are ignored by git:
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Onboarding playbook: [docs/onboarding.md](docs/onboarding.md)
 - First-run guide: [docs/first-run.md](docs/first-run.md)
+- macOS setup: [docs/macos.md](docs/macos.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Parallel Safe Mode: [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md)
 - Dual Briefing / 双端初始化: [docs/dual-briefing.md](docs/dual-briefing.md)
