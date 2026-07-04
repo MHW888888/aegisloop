@@ -125,6 +125,42 @@ Test one axis at a time. Keep the same OS, browser, workspace, and thread while 
 
 If one mode fails, rerun the same mode with the correction prompt before changing browser or OS.
 
+## Maintainer UI Smoke Script
+
+Maintainers can run an assisted real-UI smoke test against a dedicated Chrome instance with a DevTools port. This script does not read cookies or tokens from disk. It only connects to a browser you explicitly start with remote debugging enabled.
+
+Start a dedicated Chrome profile:
+
+```powershell
+Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" `
+  -ArgumentList '--remote-debugging-port=9222 --user-data-dir=C:\AegisLoopRuntime\chrome-smoke https://chatgpt.com/'
+```
+
+Log in to ChatGPT in that window, load the unpacked AegisLoop extension if needed, and open the conversation you want to test.
+
+Then run:
+
+```powershell
+npm run test:chatgpt-model-ui
+```
+
+The script writes:
+
+```text
+output/chatgpt-model-smoke/model-smoke-result.json
+output/chatgpt-model-smoke/chatgpt-model-smoke-final.png
+```
+
+What it checks:
+
+- ChatGPT is logged in in the controlled browser;
+- the AegisLoop panel is visible when the extension is loaded;
+- model options can be clicked when present;
+- the ChatGPT conversation URL stays on the same conversation;
+- the panel keeps the same local Codex session label after model switching.
+
+If the script reports `browser_challenge`, use a normal dedicated Chrome window, pass the browser check, and rerun. If it reports `login_required`, log in to the dedicated Chrome window and rerun. If it reports `model_option_not_found`, record the exact UI language, browser, and screenshot in a Model compatibility report.
+
 ## Model Brief
 
 Paste this before arming:

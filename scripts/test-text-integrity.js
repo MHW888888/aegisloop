@@ -82,6 +82,10 @@ const shellScripts = [
   'scripts/setup-macos.sh',
 ];
 
+const powershellScriptsThatMustStayAscii = [
+  'scripts/smoke-chatgpt-model-ui.ps1',
+];
+
 for (const relative of shellScripts) {
   const text = read(relative);
   if (!text.startsWith('#!/usr/bin/env sh\n')) {
@@ -89,6 +93,13 @@ for (const relative of shellScripts) {
   }
   if (text.includes('\r')) {
     fail(`${relative} must use LF line endings for macOS/Linux`);
+  }
+}
+
+for (const relative of powershellScriptsThatMustStayAscii) {
+  const text = read(relative);
+  if (/[^\x00-\x7F]/.test(text)) {
+    fail(`${relative} must stay ASCII-only for Windows PowerShell 5 compatibility`);
   }
 }
 
@@ -119,7 +130,7 @@ for (const expected of ['中文速记', 'Arm one run', 'Do not mix normal Q&A an
 }
 
 const modelCompatibility = read('docs/model-compatibility.md');
-for (const expected of ['not a built-in ChatGPT tool', '5.3', '5.5 Pro', 'Correction Prompt', '智能', '极速', '均衡', '高级', '超高', '专业', 'GPT-5.4', 'o3', 'conversationId', 'same local Codex session binding', 'Smooth Model Switching', 'Do not reconnect the tab']) {
+for (const expected of ['not a built-in ChatGPT tool', '5.3', '5.5 Pro', 'Correction Prompt', '智能', '极速', '均衡', '高级', '超高', '专业', 'GPT-5.4', 'o3', 'conversationId', 'same local Codex session binding', 'Smooth Model Switching', 'Do not reconnect the tab', 'Maintainer UI Smoke Script', 'npm run test:chatgpt-model-ui']) {
   if (!modelCompatibility.includes(expected)) {
     fail(`docs/model-compatibility.md should mention ${expected}`);
   }
