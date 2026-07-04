@@ -105,6 +105,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-stability-i
 
 GitHub may reject assignment for users who are not collaborators. If that happens, keep the `help wanted` labels and let contributors claim issues in comments.
 
+To invite the current stability contributors to specific tasks:
+
+```powershell
+$env:GITHUB_TOKEN="your-fine-grained-token"
+npm run issues:assign-stability
+Remove-Item Env:\GITHUB_TOKEN
+```
+
+This script verifies `/user` before it changes anything. If authentication fails, it stops immediately instead of printing a false success message.
+
 ## Safety Notes
 
 - Do not paste GitHub tokens into ChatGPT, Codex, issues, PRs, or docs.
