@@ -29,6 +29,7 @@
   window.__LE_LOADED__ = true;
   const CONTENT_VERSION = '0.3.7';
   const CONTRACT_VERSION = 'le-3.3';
+  const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
   const IDLE_POLL_MS = 3500;
   const DOM_NUDGE_MS = 250;
@@ -121,7 +122,8 @@
     bound: false,
     codexSessionId: null,
     workspaceDir: null,
-    bridgeUrl: 'http://127.0.0.1:17380',
+    bridgeUrl: DEFAULT_BRIDGE_URL,
+    bridgeError: null,
     apiToken: null,
     authRequired: false,
     conversationMode: 'chat',
@@ -155,12 +157,18 @@
       try {
         chrome.runtime.sendMessage({ type: 'BRIDGE', path: pathAndQuery, method, body, token: LE.apiToken, bridgeUrl: LE.bridgeUrl }, (resp) => {
           const err = chrome.runtime.lastError && chrome.runtime.lastError.message;
-          if (err || !resp) return resolve({ ok: false, error: err || 'empty bridge response' });
+          if (err || !resp) {
+            LE.bridgeError = err || 'empty bridge response';
+            return resolve({ ok: false, error: LE.bridgeError });
+          }
+          if (!resp.ok) LE.bridgeError = resp.error || 'bridge request failed';
+          else LE.bridgeError = null;
           if (resp.status === 401) LE.authRequired = true;
           resolve(resp);
         });
       } catch (e) {
-        resolve({ ok: false, error: String(e && e.message || e) });
+        LE.bridgeError = String(e && e.message || e);
+        resolve({ ok: false, error: LE.bridgeError });
       }
     });
   }
@@ -225,10 +233,32 @@
     return new Promise(res => chrome.storage.local.set({ apiToken: token || '' }, res));
   }
   function loadBridgeUrl() {
-    return new Promise(res => chrome.storage.local.get(['bridgeUrl'], o => res(o.bridgeUrl || 'http://127.0.0.1:17380')));
+    return new Promise(res => chrome.storage.local.get(['bridgeUrl'], o => res(o.bridgeUrl || DEFAULT_BRIDGE_URL)));
   }
   function saveBridgeUrl(url) {
-    return new Promise(res => chrome.storage.local.set({ bridgeUrl: url || 'http://127.0.0.1:17380' }, res));
+    return new Promise(res => chrome.storage.local.set({ bridgeUrl: url || DEFAULT_BRIDGE_URL }, res));
+  }
+  function normalizeBridgeUrlForPanel(value) {
+    const raw = String(value || DEFAULT_BRIDGE_URL).trim();
+    let url;
+    try {
+      url = new URL(raw);
+    } catch (e) {
+      throw new Error('Bridge URL must look like http://127.0.0.1:17380');
+    }
+    if (url.protocol !== 'http:') {
+      throw new Error('Bridge URL must use http, not https.');
+    }
+    if (!['127.0.0.1', 'localhost'].includes(url.hostname)) {
+      throw new Error('Bridge URL must point to 127.0.0.1 or localhost.');
+    }
+    if (!url.port) {
+      throw new Error('Bridge URL must include the local bridge port, for example http://127.0.0.1:17380');
+    }
+    if (url.pathname !== '/' || url.search || url.hash) {
+      throw new Error('Bridge URL should be only the origin, for example http://127.0.0.1:17380');
+    }
+    return url.origin;
   }
 
   async function copyText(text) {
@@ -723,9 +753,17 @@
 
     panel.querySelector('#le-dbg').onclick = () => { LE.debug = !LE.debug; panel.querySelector('#le-dbg').style.color = LE.debug ? '#b6ffc8' : ''; };
     panel.querySelector('#le-bridge-save').onclick = async () => {
-      const url = panel.querySelector('#le-bridge-url').value.trim() || 'http://127.0.0.1:17380';
+      let url;
+      try {
+        url = normalizeBridgeUrlForPanel(panel.querySelector('#le-bridge-url').value);
+      } catch (e) {
+        LE.bridgeError = e.message || String(e);
+        renderPanel();
+        return alert(LE.bridgeError);
+      }
       await saveBridgeUrl(url);
       LE.bridgeUrl = url;
+      LE.bridgeError = null;
       LE.bound = false;
       await ensureRegistered();
       renderPanel();
@@ -830,7 +868,7 @@
     if (!panel) buildPanel();
     const $ = s => panel.querySelector(s);
     const ready = currentReadyCodex();
-    if (!$('#le-bridge-url').value) $('#le-bridge-url').value = LE.bridgeUrl || 'http://127.0.0.1:17380';
+    if (!$('#le-bridge-url').value) $('#le-bridge-url').value = LE.bridgeUrl || DEFAULT_BRIDGE_URL;
     pill($('#le-bridge'), LE.bridgeOk ? 'le-ok' : 'le-bad', LE.bridgeOk ? 'online' : 'not running');
     $('#le-tokenbox').style.display = LE.authRequired ? 'block' : 'none';
     $('#le-conv').textContent = LE.conversationId ? LE.conversationId.slice(0, 8) + '...' : '(none)';
@@ -865,7 +903,7 @@
     if (brief.meta && brief.meta.objective && !$('#le-brief-objective').value) {
       $('#le-brief-objective').value = brief.meta.objective;
     }
-    $('#le-reason').textContent = LE.pauseReason ? ('reason: ' + LE.pauseReason) : '';
+    $('#le-reason').textContent = LE.bridgeError ? ('bridge: ' + String(LE.bridgeError).slice(0, 120)) : (LE.pauseReason ? ('reason: ' + LE.pauseReason) : '');
     $('#le-bindbox').style.display = (LE.conversationId && !LE.bound && LE.bridgeOk) ? 'block' : 'none';
     $('#le-blocked').style.display = LE.blockedPayload ? 'block' : 'none';
     if (LE.blockedPayload) $('#le-blocked-rule').textContent = 'rule: ' + LE.blockedPayload.rule + ' - ' + (LE.blockedPayload.prompt || '').slice(0, 80) + '...';
@@ -888,7 +926,14 @@
   buildPanel();
   Promise.all([loadApiToken(), loadBridgeUrl()]).then(([token, bridgeUrl]) => {
     LE.apiToken = token || null;
-    LE.bridgeUrl = bridgeUrl || 'http://127.0.0.1:17380';
+    try {
+      LE.bridgeUrl = normalizeBridgeUrlForPanel(bridgeUrl);
+      if (LE.bridgeUrl !== bridgeUrl) saveBridgeUrl(LE.bridgeUrl);
+    } catch (e) {
+      LE.bridgeUrl = DEFAULT_BRIDGE_URL;
+      LE.bridgeError = 'Saved bridge URL was invalid and was reset to the default.';
+      saveBridgeUrl(DEFAULT_BRIDGE_URL);
+    }
     renderPanel();
     scheduleTick(0);
   });

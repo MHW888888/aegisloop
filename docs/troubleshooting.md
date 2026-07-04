@@ -29,6 +29,15 @@ If you change the bridge port, update **Local bridge URL** in the extension pane
 http://127.0.0.1:17380
 ```
 
+The panel only accepts local bridge origins:
+
+```text
+http://127.0.0.1:<port>
+http://localhost:<port>
+```
+
+Do not paste `/health`, `https://`, a remote host, or a URL without a port into **Local bridge URL**. For example, use `http://127.0.0.1:17380`, not `http://127.0.0.1:17380/health`.
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.

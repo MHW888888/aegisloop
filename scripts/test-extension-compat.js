@@ -35,9 +35,13 @@ assert.match(background, /normalizeBridgeUrl/, 'background must normalize bridge
 assert.match(background, /127\.0\.0\.1/, 'background must allow 127.0.0.1');
 assert.match(background, /localhost/, 'background must allow localhost');
 assert.match(background, /bridge path must start with \//, 'background must reject non-path bridge requests');
-assert.match(content, /bridgeUrl: 'http:\/\/127\.0\.0\.1:17380'/, 'content must keep default bridge URL');
+assert.match(content, /DEFAULT_BRIDGE_URL = 'http:\/\/127\.0\.0\.1:17380'/, 'content must keep default bridge URL');
+assert.match(content, /bridgeUrl: DEFAULT_BRIDGE_URL/, 'content state must use the default bridge URL constant');
 assert.match(content, /loadBridgeUrl/, 'content must load persisted bridge URL');
 assert.match(content, /saveBridgeUrl/, 'content must save bridge URL');
+assert.match(content, /normalizeBridgeUrlForPanel/, 'content must validate bridge URLs before saving them');
+assert.match(content, /Bridge URL must point to 127\.0\.0\.1 or localhost/, 'content must reject non-local bridge hosts');
+assert.match(content, /Bridge URL must include the local bridge port/, 'content must require an explicit local bridge port');
 assert.match(content, /bridgeUrl: LE\.bridgeUrl/, 'content must forward configured bridge URL to background');
 
 console.log('extension compatibility checks passed');

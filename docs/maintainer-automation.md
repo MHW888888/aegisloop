@@ -81,6 +81,30 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\maintainer-gh.ps1 
 
 The script skips exact duplicate issue titles.
 
+## Create Stability Contributor Issues
+
+Use this when you want to invite contributors to help with reliability, browser compatibility, and first-run recovery docs:
+
+```powershell
+$env:GITHUB_TOKEN="your-fine-grained-token"
+npm run issues:stability
+Remove-Item Env:\GITHUB_TOKEN
+```
+
+Preview without a token:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-stability-issues.ps1 -DryRun
+```
+
+Optionally try to assign issues round-robin:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-stability-issues.ps1 -Assignees alice,bob
+```
+
+GitHub may reject assignment for users who are not collaborators. If that happens, keep the `help wanted` labels and let contributors claim issues in comments.
+
 ## Safety Notes
 
 - Do not paste GitHub tokens into ChatGPT, Codex, issues, PRs, or docs.

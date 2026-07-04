@@ -17,7 +17,8 @@
     "test:extension": "node scripts/test-extension-compat.js",
     "test:browser:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-browser-launch.ps1",
     "test:text": "node scripts/test-text-integrity.js",
-    "test:unicode": "node scripts/test-unicode-runtime.js"
+    "test:unicode": "node scripts/test-unicode-runtime.js",
+    "issues:stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-stability-issues.ps1"
   },
   "keywords": [
     "codex",
