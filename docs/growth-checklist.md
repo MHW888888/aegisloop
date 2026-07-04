@@ -29,6 +29,7 @@ Use this as a lightweight launch plan. The goal is not spam. The goal is to make
 6. Turn the clearest confusion into a README improvement.
 7. Keep 3-5 small "good first issue" items open for contributors.
 8. Reply quickly to first-time contributors and close completed issues cleanly.
+9. Use [demo-issue-pack.md](demo-issue-pack.md) to split visual demo work into contributor-friendly tasks.
 
 ## Suggested One-Liner
 

@@ -266,6 +266,7 @@ These files are local runtime state and are ignored by git:
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
+- Demo contributor issue pack: [docs/demo-issue-pack.md](docs/demo-issue-pack.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 中文说明
