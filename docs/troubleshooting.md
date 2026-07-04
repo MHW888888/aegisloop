@@ -23,6 +23,12 @@ Invoke-RestMethod http://127.0.0.1:17380/health
 
 If another process already uses the port, stop that process or change the bridge port in your local setup.
 
+If you change the bridge port, update **Local bridge URL** in the extension panel too. The default is:
+
+```text
+http://127.0.0.1:17380
+```
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.
@@ -112,7 +118,16 @@ If AegisLoop works in Chrome but fails in another browser:
 - try Microsoft Edge before Firefox/Tor;
 - confirm the browser can load unpacked extensions;
 - confirm `http://127.0.0.1:17380/health` opens in that browser;
+- if you changed the port, save the matching **Local bridge URL** in the AegisLoop panel;
 - disable privacy shields for the ChatGPT tab only, if the browser has them;
 - avoid Tor Browser for normal AegisLoop use because extra add-ons can weaken Tor's privacy model.
 
 See [browser compatibility](browser-compatibility.md) for the current support matrix.
+
+On Windows, maintainers can run:
+
+```powershell
+npm run test:browser:windows
+```
+
+This checks whether installed Chrome/Edge can load the unpacked extension without immediately rejecting the manifest.

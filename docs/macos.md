@@ -223,6 +223,12 @@ curl http://127.0.0.1:17380/health
 
 If another process is using the port, stop it or change the local bridge port in `config.json`.
 
+If you change the port, also save the matching **Local bridge URL** in the extension panel, for example:
+
+```text
+http://127.0.0.1:17400
+```
+
 ### Chrome extension cannot reach the bridge
 
 Confirm:

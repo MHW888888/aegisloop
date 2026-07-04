@@ -20,12 +20,13 @@ Use the same harmless first-run workflow in every browser:
 2. Open `http://127.0.0.1:17380/health`.
 3. Load the unpacked extension if the browser supports it.
 4. Open a ChatGPT runner thread.
-5. Confirm the panel shows **Local bridge: online**.
-6. Stay in **Chat Mode** and ask a normal question. It should not dispatch.
-7. Click **Use starter text**.
-8. Click **Arm one run**.
-9. Confirm Codex result insertion and ACK.
-10. Confirm **Freeze thread** prevents old `codex` blocks from dispatching.
+5. If you changed the bridge port, save the matching **Local bridge URL** in the panel.
+6. Confirm the panel shows **Local bridge: online**.
+7. Stay in **Chat Mode** and ask a normal question. It should not dispatch.
+8. Click **Use starter text**.
+9. Click **Arm one run**.
+10. Confirm Codex result insertion and ACK.
+11. Confirm **Freeze thread** prevents old `codex` blocks from dispatching.
 
 ## Edge Test Path
 
@@ -42,9 +43,18 @@ Record:
 - operating system;
 - Edge version;
 - AegisLoop version;
+- bridge URL;
 - whether `127.0.0.1` bridge access works;
 - whether ChatGPT composer insertion works;
 - whether result ACK works.
+
+On Windows, maintainers can also run a local Chromium-family launch smoke test:
+
+```powershell
+npm run test:browser:windows
+```
+
+This opens installed Chrome/Edge in headless mode with the unpacked extension loaded. It does not prove ChatGPT DOM compatibility, but it catches manifest-level loading problems early.
 
 ## Firefox / Tor Notes
 
@@ -84,4 +94,3 @@ AegisLoop 目前应按这个优先级测试浏览器：
 Chrome is the primary target. Edge is the next recommended compatibility target.
 Firefox/Tor are not officially supported yet.
 ```
-

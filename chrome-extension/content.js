@@ -121,6 +121,7 @@
     bound: false,
     codexSessionId: null,
     workspaceDir: null,
+    bridgeUrl: 'http://127.0.0.1:17380',
     apiToken: null,
     authRequired: false,
     conversationMode: 'chat',
@@ -152,7 +153,7 @@
   function bridge(pathAndQuery, method, body) {
     return new Promise((resolve) => {
       try {
-        chrome.runtime.sendMessage({ type: 'BRIDGE', path: pathAndQuery, method, body, token: LE.apiToken }, (resp) => {
+        chrome.runtime.sendMessage({ type: 'BRIDGE', path: pathAndQuery, method, body, token: LE.apiToken, bridgeUrl: LE.bridgeUrl }, (resp) => {
           const err = chrome.runtime.lastError && chrome.runtime.lastError.message;
           if (err || !resp) return resolve({ ok: false, error: err || 'empty bridge response' });
           if (resp.status === 401) LE.authRequired = true;
@@ -222,6 +223,12 @@
   }
   function saveApiToken(token) {
     return new Promise(res => chrome.storage.local.set({ apiToken: token || '' }, res));
+  }
+  function loadBridgeUrl() {
+    return new Promise(res => chrome.storage.local.get(['bridgeUrl'], o => res(o.bridgeUrl || 'http://127.0.0.1:17380')));
+  }
+  function saveBridgeUrl(url) {
+    return new Promise(res => chrome.storage.local.set({ bridgeUrl: url || 'http://127.0.0.1:17380' }, res));
   }
 
   async function copyText(text) {
@@ -658,6 +665,7 @@
       <header><b>AegisLoop <span class="muted" id="le-ver">v${CONTENT_VERSION}</span></b><button id="le-dbg" title="debug log">debug</button></header>
       <div class="body">
         <div class="row"><span class="k">Local bridge</span><span id="le-bridge" class="pill le-bad">not running</span></div>
+        <div class="grid"><input id="le-bridge-url" placeholder="http://127.0.0.1:17380" /><button id="le-bridge-save">Save URL</button></div>
         <div id="le-tokenbox" style="display:none">
           <div class="pill le-warn">Bridge token required</div>
           <input id="le-token" type="password" placeholder="X-AegisLoop-Token" style="margin-top:6px" />
@@ -714,6 +722,14 @@
     document.body.appendChild(panel);
 
     panel.querySelector('#le-dbg').onclick = () => { LE.debug = !LE.debug; panel.querySelector('#le-dbg').style.color = LE.debug ? '#b6ffc8' : ''; };
+    panel.querySelector('#le-bridge-save').onclick = async () => {
+      const url = panel.querySelector('#le-bridge-url').value.trim() || 'http://127.0.0.1:17380';
+      await saveBridgeUrl(url);
+      LE.bridgeUrl = url;
+      LE.bound = false;
+      await ensureRegistered();
+      renderPanel();
+    };
     panel.querySelector('#le-token-save').onclick = async () => {
       const token = panel.querySelector('#le-token').value.trim();
       await saveApiToken(token);
@@ -814,6 +830,7 @@
     if (!panel) buildPanel();
     const $ = s => panel.querySelector(s);
     const ready = currentReadyCodex();
+    if (!$('#le-bridge-url').value) $('#le-bridge-url').value = LE.bridgeUrl || 'http://127.0.0.1:17380';
     pill($('#le-bridge'), LE.bridgeOk ? 'le-ok' : 'le-bad', LE.bridgeOk ? 'online' : 'not running');
     $('#le-tokenbox').style.display = LE.authRequired ? 'block' : 'none';
     $('#le-conv').textContent = LE.conversationId ? LE.conversationId.slice(0, 8) + '...' : '(none)';
@@ -869,8 +886,12 @@
   // Startup
   // ----------------------------------------------------------------------------
   buildPanel();
-  loadApiToken().then(token => { LE.apiToken = token || null; });
-  scheduleTick(0);
+  Promise.all([loadApiToken(), loadBridgeUrl()]).then(([token, bridgeUrl]) => {
+    LE.apiToken = token || null;
+    LE.bridgeUrl = bridgeUrl || 'http://127.0.0.1:17380';
+    renderPanel();
+    scheduleTick(0);
+  });
   const mo = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (panel && panel.contains(mutation.target)) continue;

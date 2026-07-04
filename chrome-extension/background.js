@@ -9,9 +9,23 @@
  */
 'use strict';
 
-const BRIDGE = 'http://127.0.0.1:17380';
+const DEFAULT_BRIDGE = 'http://127.0.0.1:17380';
 
-async function bridgeFetch(pathAndQuery, method, body, token) {
+function normalizeBridgeUrl(value) {
+  const raw = String(value || DEFAULT_BRIDGE).trim().replace(/\/+$/, '');
+  const url = new URL(raw);
+  if (url.protocol !== 'http:') throw new Error('bridge URL must use http');
+  if (!['127.0.0.1', 'localhost'].includes(url.hostname)) {
+    throw new Error('bridge URL must point to 127.0.0.1 or localhost');
+  }
+  return url.origin;
+}
+
+async function bridgeFetch(pathAndQuery, method, body, token, bridgeUrl) {
+  if (!String(pathAndQuery || '').startsWith('/')) {
+    throw new Error('bridge path must start with /');
+  }
+  const bridge = normalizeBridgeUrl(bridgeUrl);
   const opt = {
     method: method || 'GET',
     headers: { 'Content-Type': 'application/json' },
@@ -19,7 +33,7 @@ async function bridgeFetch(pathAndQuery, method, body, token) {
   if (token) opt.headers['X-AegisLoop-Token'] = token;
   if (body !== undefined) opt.body = JSON.stringify(body);
 
-  const resp = await fetch(BRIDGE + pathAndQuery, opt);
+  const resp = await fetch(bridge + pathAndQuery, opt);
   const text = await resp.text();
   let json;
   try {
@@ -32,7 +46,7 @@ async function bridgeFetch(pathAndQuery, method, body, token) {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg || msg.type !== 'BRIDGE') return false;
-  bridgeFetch(msg.path, msg.method, msg.body, msg.token)
+  bridgeFetch(msg.path, msg.method, msg.body, msg.token, msg.bridgeUrl)
     .then(r => sendResponse({ ok: true, ...r }))
     .catch(e => sendResponse({ ok: false, error: String(e) }));
   return true;

@@ -157,6 +157,8 @@ Invoke-RestMethod http://127.0.0.1:17380/health
 
 If you set `apiToken`, save the same token in the extension panel when prompted.
 
+If you change the bridge port from the default `17380`, also update **Local bridge URL** in the extension panel, for example `http://127.0.0.1:17400`.
+
 ### 4. Load The Chrome Extension
 
 1. Open `chrome://extensions`.

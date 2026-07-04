@@ -47,6 +47,8 @@ Open the ChatGPT conversation you want to connect.
 
 If the panel shows **Local bridge: online**, the browser extension can reach the local bridge.
 
+If you changed the bridge port in `config.json`, set the same value in the panel's **Local bridge URL** field.
+
 If the chat is not bound yet, click **Connect this chat** and provide:
 
 - Local Codex session id
