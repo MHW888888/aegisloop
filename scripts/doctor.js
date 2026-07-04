@@ -129,6 +129,9 @@ function print() {
   const failCount = rows.filter((row) => row.level === 'fail').length;
   const warnCount = rows.filter((row) => row.level === 'warn').length;
   console.log(`Summary: ${failCount} fail, ${warnCount} warn`);
+  console.log('');
+  console.log('Compatibility help: docs/compatibility-matrix.md separates OS, browser, ChatGPT DOM, model, and local Codex executor issues.');
+  console.log('If a Pro / GPT-5.x model says it cannot find the tool, see docs/model-compatibility.md.');
   if (failCount) process.exitCode = 1;
 }
 

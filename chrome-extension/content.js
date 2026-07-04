@@ -83,6 +83,7 @@
       `[AegisLoop protocol ${CONTRACT_VERSION}]`,
       'Evaluate the Codex result above, then give the next step.',
       'AegisLoop is NOT a built-in ChatGPT tool. Do not try to call a tool.',
+      'If you are in a Pro or reasoning mode, do not answer with a tool-availability disclaimer.',
       'To use local Codex, write the next instruction as plain JSON inside a fenced ```codex block.',
       'Your reply MUST end with exactly one of these:',
       '1) one fenced ```codex block with JSON containing the current arm_nonce and the next instruction. Example:',
@@ -103,6 +104,7 @@
     return [
       '[AegisLoop] Your last reply had no usable fenced codex block.',
       'AegisLoop is not a built-in ChatGPT tool. Do not call or search for tools.',
+      'Do not answer that the tool is unavailable; AegisLoop reads visible page text after you reply.',
       'Reply with ONLY one JSON fenced codex block containing arm_nonce="' + (LE.armNonce || 'ARM_NONCE_FROM_PANEL') + '" and the next instruction,',
       'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
     ].join('\n');
@@ -113,6 +115,7 @@
       'Read the AegisLoop GPT brief above if present.',
       'This is a runner thread, not a normal Q&A thread.',
       'Do not call ChatGPT tools. AegisLoop works by reading your fenced codex JSON block.',
+      'If you are a Pro or reasoning model, still write page text instead of looking for a tool.',
       'Give the smallest safe next local Codex task for the current project/branch/objective.',
       'If the task should stop, reply exactly <<<LOOP_STOP>>>.',
     ].join('\n');
@@ -716,7 +719,8 @@
             <li>Generate briefing, then paste GPT brief.</li>
             <li>Use starter text, then Arm one run.</li>
           </ol>
-          <div class="tip">Use a dedicated runner thread. Keep normal Q&A in Chat mode or a separate chat.</div>
+          <div class="tip">Use a dedicated runner thread. Switching GPT models keeps the same Codex route while the ChatGPT conversation URL stays the same.</div>
+          <div class="tip">If a Pro or GPT-5.x model says no tool is available, keep this route and ask it for a visible codex JSON block.</div>
         </div>
         <div id="le-capsule" class="capsule">
           <div class="row"><span class="k">Capsule</span><span id="le-capsule-state" class="pill le-warn">legacy</span></div>

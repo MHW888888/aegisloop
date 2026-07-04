@@ -119,7 +119,7 @@ On macOS, use the dedicated [macOS setup guide](docs/macos.md). The short bridge
 npm start
 ```
 
-For browser support beyond Chrome, see [docs/browser-compatibility.md](docs/browser-compatibility.md). Chrome is the primary target, Edge is the next recommended compatibility target, and Firefox/Tor should be treated as experimental until separately packaged and tested.
+For OS / browser / model compatibility, start with [docs/compatibility-matrix.md](docs/compatibility-matrix.md). For browser support beyond Chrome, see [docs/browser-compatibility.md](docs/browser-compatibility.md). Chrome is the primary target, Edge is the next recommended compatibility target, and Firefox/Tor should be treated as experimental until separately packaged and tested.
 
 If a ChatGPT Pro or reasoning model says it cannot find the tool, see [docs/model-compatibility.md](docs/model-compatibility.md). AegisLoop does not use a built-in ChatGPT tool call; it reads a fenced `codex` JSON block from the page.
 
@@ -272,7 +272,9 @@ These files are local runtime state and are ignored by git:
 - Onboarding playbook: [docs/onboarding.md](docs/onboarding.md)
 - First-run guide: [docs/first-run.md](docs/first-run.md)
 - macOS setup: [docs/macos.md](docs/macos.md)
+- Compatibility matrix: [docs/compatibility-matrix.md](docs/compatibility-matrix.md)
 - Browser compatibility: [docs/browser-compatibility.md](docs/browser-compatibility.md)
+- Model compatibility: [docs/model-compatibility.md](docs/model-compatibility.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Parallel Safe Mode: [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md)
 - Dual Briefing / 双端初始化: [docs/dual-briefing.md](docs/dual-briefing.md)

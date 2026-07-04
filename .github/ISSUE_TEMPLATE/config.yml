@@ -6,3 +6,9 @@ contact_links:
   - name: Browser compatibility notes
     url: https://github.com/MHW888888/aegisloop/blob/main/docs/browser-compatibility.md
     about: Check current Chrome, Edge, Brave, Firefox, and Tor status.
+  - name: Compatibility matrix
+    url: https://github.com/MHW888888/aegisloop/blob/main/docs/compatibility-matrix.md
+    about: Separate OS, browser, ChatGPT DOM, model, and local Codex executor failures.
+  - name: Model compatibility notes
+    url: https://github.com/MHW888888/aegisloop/blob/main/docs/model-compatibility.md
+    about: Use this when a Pro, reasoning, or GPT-5.x model says it cannot find the tool.

@@ -46,5 +46,9 @@ assert.match(content, /bridgeUrl: LE\.bridgeUrl/, 'content must forward configur
 assert.match(content, /AegisLoop is NOT a built-in ChatGPT tool/, 'contract must explain AegisLoop is not a ChatGPT tool');
 assert.match(content, /Do not call ChatGPT tools/, 'starter text must tell models not to call ChatGPT tools');
 assert.match(content, /fenced codex JSON block/, 'contract must teach page-text codex block behavior');
+assert.match(content, /tool-availability disclaimer/, 'contract must prevent Pro/reasoning model tool disclaimers');
+assert.match(content, /Pro or reasoning model/, 'starter text must handle Pro/reasoning modes');
+assert.match(content, /Switching GPT models keeps the same Codex route/, 'panel must explain model switching is route-neutral');
+assert.match(content, /keep this route and ask it for a visible codex JSON block/, 'panel must tell users not to reconnect after Pro model tool disclaimers');
 
 console.log('extension compatibility checks passed');

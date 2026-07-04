@@ -2,6 +2,8 @@
 
 AegisLoop is currently a Chromium MV3 extension plus a local Node bridge.
 
+If you are not sure whether a failure is caused by the OS, browser, ChatGPT page, model, or local Codex, start with [compatibility-matrix.md](compatibility-matrix.md).
+
 The safe support stance is:
 
 | Browser | Status | Why |

@@ -13,7 +13,7 @@ body:
     id: model
     attributes:
       label: Model / mode tested
-      placeholder: "Example: 5.3, 5.5 Pro, reasoning mode"
+      placeholder: "Example: Balanced, Ultra, Professional, GPT-5.5, GPT-5.4, GPT-5.3, o3"
     validations:
       required: true
   - type: dropdown
@@ -46,6 +46,15 @@ body:
       description: Describe whether the model emitted a codex block, claimed no tool was available, or needed a correction prompt.
     validations:
       required: true
+  - type: checkboxes
+    id: route-invariant
+    attributes:
+      label: Route invariant checks
+      description: Model changes should not change the local Codex route when the ChatGPT conversation URL stays the same.
+      options:
+        - label: "The ChatGPT conversation URL stayed the same while switching models"
+        - label: "The extension panel kept the same local Codex session binding"
+        - label: "No reconnect or config change was performed during the model switch"
   - type: textarea
     id: sanitized-output
     attributes:

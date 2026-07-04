@@ -1,0 +1,62 @@
+name: Browser compatibility report
+description: Report whether a browser can run the AegisLoop extension and local bridge flow
+title: "[Browser]: "
+labels: ["compatibility", "browser"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for Chrome, Edge, Brave, Firefox, Tor Browser, or other browser compatibility reports.
+
+        Please do not post tokens, real conversation ids, private local paths, screenshots with secrets, ads, payment links, or wallet addresses.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: "Example: Microsoft Edge 126, Brave 1.x, Firefox Nightly"
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: ChatGPT model / mode
+      placeholder: "Example: Balanced, Ultra, GPT-5.5, GPT-5.3, o3"
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - "Pass: extension and one-run flow worked"
+        - "Warn: worked after workaround"
+        - "Fail: blocked before dispatch"
+        - "Fail: dispatched but result did not return or ACK"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks completed
+      options:
+        - label: "`http://127.0.0.1:17380/health` loaded in this browser"
+        - label: "Extension panel showed Local bridge online"
+        - label: "Chat Mode did not dispatch normal Q&A"
+        - label: "Arm one run generated or accepted a fresh nonce-bearing codex block"
+        - label: "Codex result was inserted back into ChatGPT"
+        - label: "Result ACK completed"
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / workaround
+      description: Remove secrets, real conversation ids, private paths, and tokens before pasting logs or screenshots.
+      render: text

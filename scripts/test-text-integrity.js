@@ -119,9 +119,16 @@ for (const expected of ['中文速记', 'Arm one run', 'Do not mix normal Q&A an
 }
 
 const modelCompatibility = read('docs/model-compatibility.md');
-for (const expected of ['not a built-in ChatGPT tool', '5.3', '5.5 Pro', 'Correction Prompt']) {
+for (const expected of ['not a built-in ChatGPT tool', '5.3', '5.5 Pro', 'Correction Prompt', '智能', '极速', '均衡', '高级', '超高', '专业', 'GPT-5.4', 'o3', 'conversationId', 'same local Codex session binding', 'Smooth Model Switching', 'Do not reconnect the tab']) {
   if (!modelCompatibility.includes(expected)) {
     fail(`docs/model-compatibility.md should mention ${expected}`);
+  }
+}
+
+const compatibilityMatrix = read('docs/compatibility-matrix.md');
+for (const expected of ['OS / local bridge', 'ChatGPT model output contract', 'GPT-5.5', 'GPT-5.4', 'GPT-5.3', 'o3', '智能', '专业', 'Route Invariant', 'Model choice is only a generation behavior', 'switch model -> keep route -> keep pending state']) {
+  if (!compatibilityMatrix.includes(expected)) {
+    fail(`docs/compatibility-matrix.md should mention ${expected}`);
   }
 }
 
@@ -130,9 +137,18 @@ for (const expected of [
   '"Pass: valid codex block on first try"',
   '"Warn: valid after correction prompt"',
   '"Fail: cannot produce valid codex block after nudges"',
+  'Route invariant checks',
+  'The extension panel kept the same local Codex session binding',
 ]) {
   if (!modelIssueTemplate.includes(expected)) {
     fail(`model compatibility issue template should quote dropdown option ${expected}`);
+  }
+}
+
+const browserIssueTemplate = read('.github/ISSUE_TEMPLATE/browser_compatibility.yml');
+for (const expected of ['Edge', 'Brave', 'Firefox', 'Tor Browser', 'Result ACK completed']) {
+  if (!browserIssueTemplate.includes(expected)) {
+    fail(`browser compatibility issue template should mention ${expected}`);
   }
 }
 
