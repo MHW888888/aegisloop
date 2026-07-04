@@ -10,6 +10,7 @@
 'use strict';
 
 const DEFAULT_BRIDGE = 'http://127.0.0.1:17380';
+const BRIDGE_TIMEOUT_MS = 8000;
 
 function normalizeBridgeUrl(value) {
   const raw = String(value || DEFAULT_BRIDGE).trim().replace(/\/+$/, '');
@@ -26,22 +27,40 @@ async function bridgeFetch(pathAndQuery, method, body, token, bridgeUrl) {
     throw new Error('bridge path must start with /');
   }
   const bridge = normalizeBridgeUrl(bridgeUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
   const opt = {
     method: method || 'GET',
     headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
   };
   if (token) opt.headers['X-AegisLoop-Token'] = token;
   if (body !== undefined) opt.body = JSON.stringify(body);
 
-  const resp = await fetch(bridge + pathAndQuery, opt);
-  const text = await resp.text();
-  let json;
   try {
-    json = JSON.parse(text);
-  } catch {
-    json = { _raw: text };
+    const resp = await fetch(bridge + pathAndQuery, opt);
+    const text = await resp.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { _raw: text };
+    }
+    return { status: resp.status, json };
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      return {
+        status: 504,
+        json: {
+          error: 'bridge_timeout',
+          message: `Local bridge request timed out after ${BRIDGE_TIMEOUT_MS}ms`,
+        },
+      };
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return { status: resp.status, json };
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

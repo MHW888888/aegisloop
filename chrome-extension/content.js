@@ -27,13 +27,15 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.10';
+  const CONTENT_VERSION = '0.3.11';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
   const IDLE_POLL_MS = 3500;
   const DOM_NUDGE_MS = 250;
   const SEED_FRESH_CODEX_CONFIRM_MS = 15000;
+  const CONTENT_BRIDGE_TIMEOUT_MS = 10000;
+  const NO_CODEX_GRACE_MS = 5000;
 
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
@@ -150,7 +152,11 @@
     initializedLatestSig: false,
     prevAssistantText: '',
     reformatCount: 0,              // bounded re-prompts since last real progress
+    missingCodexSig: null,
+    missingCodexFirstSeenAt: 0,
+    needsProtocolFix: false,
     seedSubmitUnconfirmed: false,
+    selectorHealth: null,
     debug: false,
     ticking: false,
     userHold: false,               // true after a manual Pause, blocks auto-resume
@@ -158,26 +164,75 @@
   const MAX_REFORMAT = 3;
   function log(...a) { if (LE.debug) console.log('%c[LE]', 'color:#0a0', ...a); }
 
+  function resetProtocolRecovery() {
+    LE.reformatCount = 0;
+    LE.missingCodexSig = null;
+    LE.missingCodexFirstSeenAt = 0;
+    LE.needsProtocolFix = false;
+  }
+
+  function resetTransientForConversation(id) {
+    LE.conversationId = id || null;
+    LE.bound = false;
+    LE.codexSessionId = null;
+    LE.workspaceDir = null;
+    LE.conversationMode = 'chat';
+    LE.armNonce = null;
+    LE.armExpiresAt = 0;
+    LE.armDispatches = 0;
+    LE.armMaxDispatches = 0;
+    LE.loopState = 'running';
+    LE.pauseReason = null;
+    LE.blockedPayload = null;
+    LE.capsule = null;
+    LE.briefing = null;
+    LE.local = 'idle';
+    LE.lastSig = null;
+    LE.initializedLatestSig = false;
+    LE.prevAssistantText = '';
+    resetProtocolRecovery();
+    LE.seedSubmitUnconfirmed = false;
+    LE.userHold = false;
+    LE.selectorHealth = null;
+    log('conversation route changed; transient state reset', id);
+  }
+
   // ----------------------------------------------------------------------------
   // Bridge comms (via background relay, to avoid https->http mixed content)
   // ----------------------------------------------------------------------------
   function bridge(pathAndQuery, method, body) {
     return new Promise((resolve) => {
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => {
+        LE.bridgeError = 'bridge_timeout';
+        finish({
+          ok: false,
+          status: 504,
+          error: 'bridge_timeout',
+          json: { error: 'bridge_timeout' },
+        });
+      }, CONTENT_BRIDGE_TIMEOUT_MS);
       try {
         chrome.runtime.sendMessage({ type: 'BRIDGE', path: pathAndQuery, method, body, token: LE.apiToken, bridgeUrl: LE.bridgeUrl }, (resp) => {
           const err = chrome.runtime.lastError && chrome.runtime.lastError.message;
           if (err || !resp) {
             LE.bridgeError = err || 'empty bridge response';
-            return resolve({ ok: false, error: LE.bridgeError });
+            return finish({ ok: false, error: LE.bridgeError });
           }
           if (!resp.ok) LE.bridgeError = resp.error || 'bridge request failed';
           else LE.bridgeError = null;
           if (resp.status === 401) LE.authRequired = true;
-          resolve(resp);
+          finish(resp);
         });
       } catch (e) {
         LE.bridgeError = String(e && e.message || e);
-        resolve({ ok: false, error: LE.bridgeError });
+        finish({ ok: false, error: LE.bridgeError });
       }
     });
   }
@@ -192,9 +247,12 @@
 
   async function ensureRegistered() {
     const id = readConversationId();
-    if (!id) { LE.conversationId = null; LE.bound = false; return; }
+    if (!id) {
+      if (LE.conversationId || LE.bound) resetTransientForConversation(null);
+      return;
+    }
+    if (id !== LE.conversationId) resetTransientForConversation(id);
     if (id === LE.conversationId && LE.bound) return;
-    LE.conversationId = id;
     const stored = await loadLocalBinding(id);
     const r = await bridge('/api/register', 'POST', {
       conversationId: id,
@@ -299,6 +357,12 @@
     for (const m of msgs) if (m.role === 'assistant') { last = m; count++; }
     return last ? Object.assign({}, last, { count }) : null;
   }
+  function latestUser() {
+    const msgs = SEL.messages();
+    let last = null, count = 0;
+    for (const m of msgs) if (m.role === 'user') { last = m; count++; }
+    return last ? Object.assign({}, last, { count }) : null;
+  }
   function userMsgCount() {
     return SEL.messages().filter(m => m.role === 'user').length;
   }
@@ -306,6 +370,21 @@
 
   function sigOf(a) { return a ? `${a.count}|${a.text.length}|${djb2(a.text.slice(-120))}` : null; }
   function djb2(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h >>> 0; }
+
+  function selectorHealth() {
+    const msgs = SEL.messages();
+    const assistant = latestAssistant();
+    const user = latestUser();
+    return {
+      composer: !!SEL.composer(),
+      send: !!SEL.sendButton(),
+      stop: !!SEL.stopButton(),
+      assistants: msgs.filter(m => m.role === 'assistant').length,
+      users: msgs.filter(m => m.role === 'user').length,
+      latestAssistantSig: sigOf(assistant) || '-',
+      latestUserSig: sigOf(user) || '-',
+    };
+  }
 
   // Collect text of <pre>/<code> blocks rendered in a message (ChatGPT renders
   // ```codex as <pre><code> and innerText then loses the ``` fences).
@@ -603,7 +682,7 @@
               jobId: result.jobId,
             });
             LE.local = 'awaiting_assistant';
-            LE.reformatCount = 0;
+            resetProtocolRecovery();
           }
           else {
             LE.local = 'idle';
@@ -635,6 +714,7 @@
       if (parsed && parsed.stop) {
         LE.lastSig = sig;
         LE.seedSubmitUnconfirmed = false;
+        resetProtocolRecovery();
         await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'loop_stop_requested' });
         log('GPT requested LOOP_STOP -> chat mode');
         return;
@@ -648,13 +728,12 @@
         });
         LE.lastSig = sig;
         LE.seedSubmitUnconfirmed = false;
+        resetProtocolRecovery();
         if (d.ok && d.json.status === 'accepted') {
           LE.local = 'dispatching';
-          LE.reformatCount = 0;
           log('dispatched to codex, waiting result');
         } else if (d.ok && d.json.status === 'busy') {
           LE.local = 'dispatching';
-          LE.reformatCount = 0;
           log('conversation already has an active dispatch, waiting result');
         } else if (d.ok && d.json.status === 'duplicate') {
           LE.local = 'idle';
@@ -666,23 +745,38 @@
         return;
       }
 
-      // No executable codex block. Nudge GPT back onto the protocol, bounded by
-      // MAX_REFORMAT; only pause for the human once the budget is spent. This is
-      // what lets the loop keep going when GPT forgets to emit a codex block.
-      LE.lastSig = sig;
+      // No executable codex block. Give slow reasoning replies a grace window
+      // before nudging them back onto the protocol. If the bounded budget is
+      // spent, pause as a protocol issue instead of silently turning this into
+      // an ordinary Chat Mode thread.
+      if (LE.missingCodexSig !== sig) {
+        LE.missingCodexSig = sig;
+        LE.missingCodexFirstSeenAt = Date.now();
+        LE.local = 'awaiting_assistant';
+        log('no codex block yet -> grace window before protocol repair');
+        return;
+      }
+      if (Date.now() - LE.missingCodexFirstSeenAt < NO_CODEX_GRACE_MS) {
+        LE.local = 'awaiting_assistant';
+        return;
+      }
       if (!LE.userHold && LE.reformatCount < MAX_REFORMAT) {
         LE.reformatCount++;
         log('no codex block -> reformat nudge', LE.reformatCount, '/', MAX_REFORMAT);
         const sent = await submitToGPT(reformatMsg());
+        LE.lastSig = sig;
         if (sent) { LE.local = 'awaiting_assistant'; }
         else {
           LE.local = 'idle';
-          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'reformat_submit_failed' });
+          LE.needsProtocolFix = true;
+          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'reformat_submit_failed' });
         }
       } else {
+        LE.lastSig = sig;
         LE.local = 'idle';
-        await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat', reason: 'assistant_missing_codex' });
-        log('no codex block and reformat budget spent -> paused for human');
+        LE.needsProtocolFix = true;
+        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, action: 'pause', reason: 'needs_user_protocol_fix' });
+        log('no codex block and reformat budget spent -> protocol fix needed');
       }
       return;
     } catch (e) {
@@ -774,6 +868,12 @@
           <div class="grid" style="margin-top:6px"><button id="le-approve" class="go">Allow once</button><button id="le-skip">Skip</button></div>
         </div>
         <div id="le-simple" class="pill le-run">checking...</div>
+        <div id="le-selector-health" class="capsule">
+          <div class="row"><span class="k">Selector health</span><span id="le-sel-state" class="pill le-warn">checking</span></div>
+          <div class="row"><span class="k">Composer / Send / Stop</span><span id="le-sel-controls" class="muted">-</span></div>
+          <div class="row"><span class="k">Assistant / User</span><span id="le-sel-counts" class="muted">-</span></div>
+          <div class="row"><span class="k">Latest sigs</span><span id="le-sel-sigs" class="muted">-</span></div>
+        </div>
         <div id="le-seed-label" class="muted">First instruction (optional)</div>
         <textarea id="le-seed" placeholder="Recommended: click Use starter text, then Arm one run."></textarea>
         <button id="le-seed-starter">Use starter text</button>
@@ -844,7 +944,7 @@
       if (!(mode.ok && mode.status === 200 && mode.json.ok)) return;
       LE.userHold = false;
       LE.local = 'idle';
-      LE.reformatCount = 0;
+      resetProtocolRecovery();
       LE.seedSubmitUnconfirmed = false;
       LE.conversationMode = mode.json.conversationMode || 'armed';
       LE.loopState = mode.json.loopState || 'running';
@@ -887,7 +987,7 @@
       LE.userHold = true;
       LE.seedSubmitUnconfirmed = false;
       LE.lastSig = sigOf(latestAssistant());
-      LE.reformatCount = 0;
+      resetProtocolRecovery();
       await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'chat' });
       renderPanel();
     };
@@ -896,7 +996,7 @@
       LE.userHold = true;
       LE.seedSubmitUnconfirmed = false;
       LE.lastSig = sigOf(latestAssistant());
-      LE.reformatCount = 0;
+      resetProtocolRecovery();
       await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, action: 'freeze' });
       renderPanel();
     };
@@ -958,7 +1058,8 @@
     $('#le-bindbox').style.display = (LE.conversationId && !LE.bound && LE.bridgeOk) ? 'block' : 'none';
     $('#le-blocked').style.display = LE.blockedPayload ? 'block' : 'none';
     if (LE.blockedPayload) $('#le-blocked-rule').textContent = 'rule: ' + LE.blockedPayload.rule + ' - ' + (LE.blockedPayload.prompt || '').slice(0, 80) + '...';
-    if (LE.seedSubmitUnconfirmed && activeMode()) pill($('#le-simple'), 'le-warn', 'Seed unconfirmed: still armed, waiting for fresh nonce block.');
+    if (LE.needsProtocolFix || LE.pauseReason === 'needs_user_protocol_fix') pill($('#le-simple'), 'le-warn', 'Protocol fix needed: ask GPT for one visible codex JSON block.');
+    else if (LE.seedSubmitUnconfirmed && activeMode()) pill($('#le-simple'), 'le-warn', 'Seed unconfirmed: still armed, waiting for fresh nonce block.');
     else if (LE.conversationMode === 'chat') pill($('#le-simple'), 'le-ok', 'Chat mode: automation is off.');
     else if (LE.conversationMode === 'frozen') pill($('#le-simple'), 'le-bad', 'Frozen: this thread cannot execute.');
     else if (LE.local === 'dispatching') pill($('#le-simple'), 'le-run', 'Codex is running. Wait for result.');
@@ -967,6 +1068,13 @@
     else if (LE.conversationMode === 'armed') pill($('#le-simple'), 'le-warn', 'Armed: waiting for a fresh nonce block.');
     else if (LE.conversationMode === 'review') pill($('#le-simple'), 'le-warn', 'Review: waiting for GPT next step with nonce.');
     else pill($('#le-simple'), 'le-warn', 'Idle.');
+    LE.selectorHealth = selectorHealth();
+    const h = LE.selectorHealth;
+    const selectorOk = h.composer && h.assistants + h.users > 0;
+    pill($('#le-sel-state'), selectorOk ? 'le-ok' : 'le-warn', selectorOk ? 'ok' : 'check');
+    $('#le-sel-controls').textContent = `C:${h.composer ? 'y' : 'n'} S:${h.send ? 'y' : 'n'} Stop:${h.stop ? 'y' : 'n'}`;
+    $('#le-sel-counts').textContent = `A:${h.assistants} U:${h.users}`;
+    $('#le-sel-sigs').textContent = `A:${String(h.latestAssistantSig).slice(0, 18)} U:${String(h.latestUserSig).slice(0, 18)}`;
     const showSeed = LE.local !== 'dispatching' && LE.local !== 'inserting';
     $('#le-seed-label').style.display = showSeed ? 'block' : 'none';
     $('#le-seed').style.display = showSeed ? 'block' : 'none';

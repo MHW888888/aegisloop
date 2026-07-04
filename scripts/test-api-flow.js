@@ -72,6 +72,10 @@ async function main() {
     'let input = "";',
     'process.stdin.on("data", chunk => { input += chunk; });',
     'process.stdin.on("end", () => {',
+    '  if (input.includes("FAIL_TASK")) {',
+    '    console.error("FAKE_CODEX_FAIL");',
+    '    process.exit(2);',
+    '  }',
     '  console.log("FAKE_CODEX_OK");',
     '  console.log(input.includes("V8.4b-SW") ? "HAS_BRANCH" : "NO_BRANCH");',
     '});',
@@ -109,7 +113,7 @@ async function main() {
       stdinFlag: '-',
       timeoutMs: 5000,
     },
-    breaker: { maxConsecutiveFailures: 2 },
+    breaker: { maxConsecutiveFailures: 4 },
     minIntervalMs: 1,
     maxResultChars: 4000,
     feishuWebhook: '',
@@ -214,6 +218,25 @@ async function main() {
     assert.strictEqual(stillPending.status, 200);
     assert.strictEqual(stillPending.json.hasResult, true);
 
+    const pendingArm = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, action: 'arm_once' }),
+    });
+    assert.strictEqual(pendingArm.status, 200);
+    const pendingDispatch = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        conversationId,
+        prompt: `Execute ${branch} while previous result is pending`,
+        armNonce: pendingArm.json.armNonce,
+      }),
+    });
+    assert.strictEqual(pendingDispatch.status, 200);
+    assert.strictEqual(pendingDispatch.json.status, 'pending_result_exists');
+    assert.strictEqual(pendingDispatch.json.jobId, result.jobId);
+
     const ack = await fetchJson(`${base}/api/result/ack`, {
       method: 'POST',
       headers,
@@ -227,7 +250,69 @@ async function main() {
     });
     assert.strictEqual(afterAck.status, 200);
     assert.strictEqual(afterAck.json.hasResult, false);
-    assert.strictEqual(afterAck.json.pauseReason, 'chat_mode');
+
+    const duplicateArm = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, action: 'arm_once' }),
+    });
+    assert.strictEqual(duplicateArm.status, 200);
+    const duplicateDispatch = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        conversationId,
+        prompt: `Execute ${branch} read-only smoke task`,
+        armNonce: duplicateArm.json.armNonce,
+      }),
+    });
+    assert.strictEqual(duplicateDispatch.status, 200);
+    assert.strictEqual(duplicateDispatch.json.status, 'duplicate');
+
+    const failArm = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, action: 'arm_once' }),
+    });
+    assert.strictEqual(failArm.status, 200);
+    const failedDispatch = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        conversationId,
+        prompt: `Execute ${branch} FAIL_TASK`,
+        armNonce: failArm.json.armNonce,
+      }),
+    });
+    assert.strictEqual(failedDispatch.status, 200);
+    assert.strictEqual(failedDispatch.json.status, 'accepted');
+    const failedResult = await waitForResult(base, token, conversationId);
+    assert.strictEqual(failedResult.ok, false);
+    const failedAck = await fetchJson(`${base}/api/result/ack`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, jobId: failedResult.jobId }),
+    });
+    assert.strictEqual(failedAck.status, 200);
+    assert.strictEqual(failedAck.json.ok, true);
+
+    const retryArm = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, action: 'arm_once' }),
+    });
+    assert.strictEqual(retryArm.status, 200);
+    const retryFailedDispatch = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        conversationId,
+        prompt: `Execute ${branch} FAIL_TASK`,
+        armNonce: retryArm.json.armNonce,
+      }),
+    });
+    assert.strictEqual(retryFailedDispatch.status, 200);
+    assert.strictEqual(retryFailedDispatch.json.status, 'accepted');
 
     console.log('api flow smoke test passed');
   } finally {

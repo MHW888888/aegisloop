@@ -56,7 +56,7 @@ function checkConfig() {
   if (config.apiToken) {
     mark('ok', 'apiToken', 'configured; value hidden');
   } else {
-    mark('warn', 'apiToken', 'empty; acceptable for private throwaway setups only');
+    mark('warn', 'apiToken', 'empty; strong warning: use only for a private throwaway localhost test');
   }
 
   if (config.runtimeRoot && !isPlaceholder(config.runtimeRoot)) {

@@ -38,6 +38,8 @@ http://localhost:<port>
 
 Do not paste `/health`, `https://`, a remote host, or a URL without a port into **Local bridge URL**. For example, use `http://127.0.0.1:17380`, not `http://127.0.0.1:17380/health`.
 
+If the panel reports `bridge_timeout`, the page request to the local bridge took too long. Keep the ChatGPT thread open, confirm the terminal running `npm start` is still alive, and retry after `/health` responds again. AegisLoop keeps the local route state instead of silently dropping the run.
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.
@@ -142,7 +144,15 @@ Paste the GPT brief into the runner thread before arming. If the project, branch
 
 If ChatGPT changes its web UI, the extension may fail to find the composer, send button, or messages.
 
-Open the panel debug mode and check the browser console for `[LE]` logs.
+Open the panel debug mode and check **Selector health**:
+
+- `C` means the composer was found.
+- `S` means the send button was found.
+- `Stop` means a running-generation stop control was found.
+- `A` / `U` show assistant and user message counts.
+- `sig` values show the latest assistant/user message signatures used for route baselining.
+
+Also check the browser console for `[LE]` logs.
 
 The likely fix is updating the selector block in `chrome-extension/content.js`.
 

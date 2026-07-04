@@ -1,6 +1,6 @@
 {
   "name": "aegisloop",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "private": false,
   "description": "A simpler guarded bridge where ChatGPT plans and local Codex executes safely.",
   "main": "server.js",

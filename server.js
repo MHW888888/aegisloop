@@ -126,6 +126,9 @@ function defaultConversation(binding) {
     armExpiresAt: 0,
     armMaxDispatches: 0,
     armDispatches: 0,
+    attemptedHashes: [],
+    ackedHashes: [],
+    failedHashes: [],
     executedHashes: [],
     consecutiveFailures: 0,
     lastJobId: null,
@@ -140,6 +143,31 @@ function defaultConversation(binding) {
 }
 
 let STATE = { conversations: {} };
+
+function rememberHash(conversation, field, hash, limit = 500) {
+  if (!hash) return;
+  if (!Array.isArray(conversation[field])) conversation[field] = [];
+  if (!conversation[field].includes(hash)) conversation[field].push(hash);
+  if (conversation[field].length > limit) {
+    conversation[field].splice(0, conversation[field].length - limit);
+  }
+}
+
+function ensureHashBuckets(conversation) {
+  if (!conversation) return;
+  if (!Array.isArray(conversation.attemptedHashes)) conversation.attemptedHashes = [];
+  if (!Array.isArray(conversation.failedHashes)) conversation.failedHashes = [];
+  if (!Array.isArray(conversation.ackedHashes)) {
+    conversation.ackedHashes = Array.isArray(conversation.executedHashes)
+      ? [...conversation.executedHashes]
+      : [];
+  }
+  if (!Array.isArray(conversation.executedHashes)) conversation.executedHashes = [...conversation.ackedHashes];
+}
+
+function hasUnconsumedPendingResult(conversation) {
+  return !!(conversation && conversation.pendingResult && !conversation.pendingResult.consumed);
+}
 
 function loadState() {
   try {
@@ -170,6 +198,7 @@ function loadState() {
     if (!Object.prototype.hasOwnProperty.call(existing, 'armExpiresAt')) existing.armExpiresAt = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armMaxDispatches')) existing.armMaxDispatches = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armDispatches')) existing.armDispatches = 0;
+    ensureHashBuckets(existing);
   }
 }
 
@@ -569,13 +598,76 @@ function classifyFailure(code, stderr, stdout) {
   return 'task';
 }
 
+function createOutputBuffer(limit) {
+  const max = Math.max(4096, Number(limit || 0) || 1024 * 1024);
+  let tail = '';
+  let totalChars = 0;
+  let truncated = false;
+
+  return {
+    append(chunk) {
+      const text = chunk == null ? '' : chunk.toString();
+      totalChars += text.length;
+      tail += text;
+      if (tail.length > max) {
+        truncated = true;
+        tail = tail.slice(-max);
+      }
+    },
+    text() {
+      return truncated ? `...(output truncated; kept last ${max} chars)\n${tail}` : tail;
+    },
+    meta() {
+      return {
+        totalChars,
+        keptChars: tail.length,
+        truncated,
+      };
+    },
+  };
+}
+
+function killProcessTree(child, conversation, jobId) {
+  if (!child || !child.pid) return;
+  const pid = child.pid;
+  const platform = process.platform;
+  audit(conversation.conversationId, {
+    type: 'codex_timeout_kill_tree',
+    jobId,
+    pid,
+    platform,
+  });
+
+  if (platform === 'win32') {
+    try {
+      spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+    } catch {
+      try { child.kill('SIGKILL'); } catch {}
+    }
+    return;
+  }
+
+  try {
+    process.kill(-pid, 'SIGTERM');
+    setTimeout(() => {
+      try { process.kill(-pid, 'SIGKILL'); } catch {}
+    }, 1500).unref();
+  } catch {
+    try { child.kill('SIGKILL'); } catch {}
+  }
+}
+
 function runCodexOnce(conversation, prompt) {
   return new Promise(resolve => {
     const codex = CONFIG.codex;
     const args = [...codex.args, conversation.codexSessionId, codex.stdinFlag || '-'];
     const jobId = 'job_' + crypto.randomBytes(6).toString('hex');
-    let stdout = '';
-    let stderr = '';
+    const bufferLimit = CONFIG.outputBufferChars || 1024 * 1024;
+    const stdout = createOutputBuffer(bufferLimit);
+    const stderr = createOutputBuffer(bufferLimit);
     let child;
     let settled = false;
 
@@ -587,13 +679,15 @@ function runCodexOnce(conversation, prompt) {
     }
 
     const timer = setTimeout(() => {
-      try { if (child) child.kill('SIGKILL'); } catch {}
+      killProcessTree(child, conversation, jobId);
       finish({
         ok: false,
         jobId,
         code: 'timeout',
-        stdout,
-        stderr: stderr + '\nAegisLoop timeout',
+        stdout: stdout.text(),
+        stderr: stderr.text() + '\nAegisLoop timeout',
+        stdoutMeta: stdout.meta(),
+        stderrMeta: stderr.meta(),
         errorClass: 'infra',
       });
     }, codex.timeoutMs || 1800000);
@@ -605,6 +699,7 @@ function runCodexOnce(conversation, prompt) {
       child = spawn(codex.bin, args, {
         cwd,
         windowsHide: true,
+        detached: process.platform !== 'win32',
         env: process.env,
       });
     } catch (error) {
@@ -612,26 +707,32 @@ function runCodexOnce(conversation, prompt) {
         ok: false,
         jobId,
         code: 'spawn_exception',
-        stdout,
+        stdout: stdout.text(),
         stderr: String(error && error.stack || error),
+        stdoutMeta: stdout.meta(),
+        stderrMeta: stderr.meta(),
         errorClass: 'infra',
       });
       return;
     }
 
-    child.stdout.on('data', chunk => { stdout += chunk.toString(); });
-    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.stdout.on('data', chunk => { stdout.append(chunk); });
+    child.stderr.on('data', chunk => { stderr.append(chunk); });
     child.on('error', error => {
-      stderr += '\n' + String(error && error.stack || error);
+      stderr.append('\n' + String(error && error.stack || error));
     });
     child.on('close', code => {
+      const stdoutText = stdout.text();
+      const stderrText = stderr.text();
       finish({
         ok: code === 0,
         jobId,
         code,
-        stdout,
-        stderr,
-        errorClass: code === 0 ? null : classifyFailure(code, stderr, stdout),
+        stdout: stdoutText,
+        stderr: stderrText,
+        stdoutMeta: stdout.meta(),
+        stderrMeta: stderr.meta(),
+        errorClass: code === 0 ? null : classifyFailure(code, stderrText, stdoutText),
       });
     });
 
@@ -648,6 +749,7 @@ function extractFinal(stdout) {
 }
 
 function prepareDispatch(conversation, prompt, armNonce) {
+  ensureHashBuckets(conversation);
   if (!['armed', 'review'].includes(conversation.conversationMode)) {
     audit(conversation.conversationId, {
       type: 'mode_blocked',
@@ -691,6 +793,18 @@ function prepareDispatch(conversation, prompt, armNonce) {
   if (conversation.activeDispatchHash) {
     return { status: 'busy', hash: conversation.activeDispatchHash };
   }
+  if (hasUnconsumedPendingResult(conversation)) {
+    audit(conversation.conversationId, {
+      type: 'pending_result_blocked_dispatch',
+      jobId: conversation.pendingResult.jobId,
+      turn: conversation.pendingResult.turn,
+    });
+    return {
+      status: 'pending_result_exists',
+      jobId: conversation.pendingResult.jobId,
+      turn: conversation.pendingResult.turn,
+    };
+  }
 
   const capsuleGate = capsuleCheck(conversation, prompt);
   if (!capsuleGate.ok) {
@@ -714,7 +828,7 @@ function prepareDispatch(conversation, prompt, armNonce) {
 
   const effectivePrompt = decoratePrompt(conversation, prompt);
   const hash = hashPayload(effectivePrompt);
-  if (conversation.executedHashes.includes(hash)) {
+  if (conversation.ackedHashes.includes(hash)) {
     audit(conversation.conversationId, { type: 'duplicate_payload', hash });
     return { status: 'duplicate', hash };
   }
@@ -739,13 +853,10 @@ function prepareDispatch(conversation, prompt, armNonce) {
     }
   }
 
-  conversation.executedHashes.push(hash);
+  rememberHash(conversation, 'attemptedHashes', hash);
   conversation.activeDispatchHash = hash;
   conversation.armDispatches = (conversation.armDispatches || 0) + 1;
   conversation.conversationMode = 'running';
-  if (conversation.executedHashes.length > 500) {
-    conversation.executedHashes.splice(0, conversation.executedHashes.length - 500);
-  }
   saveState();
   ensureCapsuleRuntime(conversation);
   return { status: 'accepted', hash, prompt: effectivePrompt };
@@ -787,8 +898,11 @@ async function runDispatchAsync(conversation, prompt, hash) {
       conversation.pendingResult = {
         turn,
         jobId: result.jobId,
+        hash,
         ok: true,
         finalMessage,
+        stdoutMeta: result.stdoutMeta || null,
+        stderrMeta: result.stderrMeta || null,
         consumed: false,
         at: Date.now(),
       };
@@ -797,6 +911,8 @@ async function runDispatchAsync(conversation, prompt, hash) {
         turn,
         jobId: result.jobId,
         code: result.code,
+        stdoutMeta: result.stdoutMeta || null,
+        stderrMeta: result.stderrMeta || null,
         finalMessage,
       });
       return;
@@ -813,8 +929,11 @@ async function runDispatchAsync(conversation, prompt, hash) {
     conversation.pendingResult = {
       turn,
       jobId: result.jobId,
+      hash,
       ok: false,
       finalMessage: failMessage,
+      stdoutMeta: result.stdoutMeta || null,
+      stderrMeta: result.stderrMeta || null,
       consumed: false,
       at: Date.now(),
     };
@@ -824,6 +943,8 @@ async function runDispatchAsync(conversation, prompt, hash) {
       jobId: result.jobId,
       code: result.code,
       errorClass: result.errorClass,
+      stdoutMeta: result.stdoutMeta || null,
+      stderrMeta: result.stderrMeta || null,
     });
 
     const maxFailures = CONFIG.breaker?.maxConsecutiveFailures || 4;
@@ -844,9 +965,20 @@ async function runDispatchAsync(conversation, prompt, hash) {
 }
 
 async function forceExecute(conversation, prompt) {
+  ensureHashBuckets(conversation);
+  if (hasUnconsumedPendingResult(conversation)) {
+    audit(conversation.conversationId, {
+      type: 'pending_result_blocked_force_execute',
+      jobId: conversation.pendingResult.jobId,
+      turn: conversation.pendingResult.turn,
+    });
+    return { ok: false, status: 'pending_result_exists' };
+  }
+
   const effectivePrompt = decoratePrompt(conversation, prompt);
   const hash = hashPayload(effectivePrompt);
   conversation.activeDispatchHash = hash;
+  rememberHash(conversation, 'attemptedHashes', hash);
   conversation.updatedAt = Date.now();
   saveState();
 
@@ -861,15 +993,17 @@ async function forceExecute(conversation, prompt) {
   });
 
   conversation.lastJobId = result.jobId;
-  if (!conversation.executedHashes.includes(hash)) conversation.executedHashes.push(hash);
   conversation.consecutiveFailures = result.ok ? 0 : conversation.consecutiveFailures + 1;
   conversation.pendingResult = {
     turn,
     jobId: result.jobId,
+    hash,
     ok: result.ok,
     finalMessage: result.ok
       ? extractFinal(result.stdout)
       : `[Codex execution failed code=${result.code}]\n${String(result.stderr || '').slice(-2000)}`,
+    stdoutMeta: result.stdoutMeta || null,
+    stderrMeta: result.stderrMeta || null,
     consumed: false,
     at: Date.now(),
   };
@@ -881,7 +1015,10 @@ async function forceExecute(conversation, prompt) {
     turn,
     jobId: result.jobId,
     code: result.code,
+    stdoutMeta: result.stdoutMeta || null,
+    stderrMeta: result.stderrMeta || null,
   });
+  return { ok: true, status: 'accepted', hash };
 }
 
 function sendJson(response, code, object) {
@@ -1110,6 +1247,14 @@ const server = http.createServer(async (request, response) => {
         });
       }
 
+      ensureHashBuckets(conversation);
+      const ackedResult = conversation.pendingResult;
+      if (ackedResult.ok && ackedResult.hash) {
+        rememberHash(conversation, 'ackedHashes', ackedResult.hash);
+        rememberHash(conversation, 'executedHashes', ackedResult.hash);
+      } else if (ackedResult.hash) {
+        rememberHash(conversation, 'failedHashes', ackedResult.hash);
+      }
       conversation.pendingResult.consumed = true;
       if (remainingDispatches(conversation) > 0 && conversation.armNonce && Date.now() <= conversation.armExpiresAt) {
         conversation.conversationMode = 'review';
@@ -1128,8 +1273,10 @@ const server = http.createServer(async (request, response) => {
       saveState();
       audit(conversation.conversationId, {
         type: 'result_ack',
-        jobId: conversation.pendingResult.jobId,
-        turn: conversation.pendingResult.turn,
+        jobId: ackedResult.jobId,
+        turn: ackedResult.turn,
+        hash: ackedResult.hash || null,
+        resultOk: !!ackedResult.ok,
         conversationMode: conversation.conversationMode,
       });
       return sendJson(response, 200, { ok: true, hasPendingResult: false });
@@ -1151,6 +1298,8 @@ const server = http.createServer(async (request, response) => {
 
       conversation.loopState = 'paused';
       conversation.pauseReason = body.reason || 'result_not_acknowledged';
+      ensureHashBuckets(conversation);
+      if (conversation.pendingResult.hash) rememberHash(conversation, 'failedHashes', conversation.pendingResult.hash);
       conversation.updatedAt = Date.now();
       saveState();
       audit(conversation.conversationId, {
@@ -1204,6 +1353,13 @@ const server = http.createServer(async (request, response) => {
 
       if (body.action === 'approve') {
         if (!conversation.blockedPayload) return sendJson(response, 400, { error: 'no blocked payload' });
+        if (hasUnconsumedPendingResult(conversation)) {
+          return sendJson(response, 409, {
+            error: 'pending_result_exists',
+            jobId: conversation.pendingResult.jobId,
+            turn: conversation.pendingResult.turn,
+          });
+        }
         const blocked = conversation.blockedPayload;
         conversation.blockedPayload = null;
         conversation.loopState = 'running';
@@ -1223,8 +1379,10 @@ const server = http.createServer(async (request, response) => {
       }
 
       if (body.action === 'skip') {
-        if (conversation.blockedPayload && !conversation.executedHashes.includes(conversation.blockedPayload.hash)) {
-          conversation.executedHashes.push(conversation.blockedPayload.hash);
+        ensureHashBuckets(conversation);
+        if (conversation.blockedPayload && conversation.blockedPayload.hash) {
+          rememberHash(conversation, 'ackedHashes', conversation.blockedPayload.hash);
+          rememberHash(conversation, 'executedHashes', conversation.blockedPayload.hash);
         }
         conversation.blockedPayload = null;
         conversation.loopState = 'running';

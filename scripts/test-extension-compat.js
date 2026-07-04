@@ -18,6 +18,7 @@ const pkg = readJson('package.json');
 const manifest = readJson('chrome-extension/manifest.json');
 const content = read('chrome-extension/content.js');
 const background = read('chrome-extension/background.js');
+const server = read('server.js');
 
 assert.strictEqual(manifest.manifest_version, 3, 'extension must stay MV3');
 assert.strictEqual(manifest.version, pkg.version, 'manifest version must match package.json');
@@ -31,6 +32,9 @@ assert.ok(hostPermissions.includes('http://localhost/*'), 'manifest must allow l
 assert.ok(!hostPermissions.some(pattern => /127\.0\.0\.1:\d+/.test(pattern)), 'manifest must not pin 127.0.0.1 to one port');
 
 assert.match(background, /DEFAULT_BRIDGE = 'http:\/\/127\.0\.0\.1:17380'/, 'background must keep safe default bridge URL');
+assert.match(background, /BRIDGE_TIMEOUT_MS = 8000/, 'background bridge fetch must have a bounded timeout');
+assert.match(background, /AbortController/, 'background bridge fetch must use AbortController');
+assert.match(background, /bridge_timeout/, 'background must return structured bridge timeout errors');
 assert.match(background, /normalizeBridgeUrl/, 'background must normalize bridge URLs');
 assert.match(background, /127\.0\.0\.1/, 'background must allow 127.0.0.1');
 assert.match(background, /localhost/, 'background must allow localhost');
@@ -61,5 +65,20 @@ assert.match(content, /seedSubmitUnconfirmed/, 'seed fallback must expose an unc
 assert.match(content, /still armed and waiting until arm TTL/, 'seed fallback must tell users it is still armed');
 assert.match(content, /seed submit not confirmed; staying armed until arm TTL or manual Chat Mode/, 'seed fallback must keep waiting instead of failing to chat');
 assert.doesNotMatch(content, /reason:\s*'seed_submit_not_confirmed'/, 'seed fallback must not automatically switch back to Chat Mode');
+assert.match(content, /CONTENT_BRIDGE_TIMEOUT_MS = 10000/, 'content bridge calls must have a timeout safety net');
+assert.match(content, /resetTransientForConversation/, 'content must reset transient state when the ChatGPT conversation changes');
+assert.match(content, /NO_CODEX_GRACE_MS = 5000/, 'no-codex recovery must wait before nudging');
+assert.match(content, /needs_user_protocol_fix/, 'protocol repair exhaustion must use an explicit protocol-fix state');
+assert.match(content, /Selector health/, 'panel must expose selector health');
+assert.match(content, /selectorHealth/, 'content must compute selector health');
+assert.doesNotMatch(content, /action:\s*'chat'[\s\S]{0,120}assistant_missing_codex/, 'missing codex recovery must not silently switch to Chat Mode');
+
+assert.match(server, /pending_result_exists/, 'server must block new dispatches while a result is pending');
+assert.match(server, /ackedHashes/, 'server must separate acked hashes from attempts');
+assert.match(server, /failedHashes/, 'server must track failed hashes separately');
+assert.match(server, /attemptedHashes/, 'server must track attempted hashes separately');
+assert.match(server, /taskkill/, 'server must kill process trees on Windows timeouts');
+assert.match(server, /codex_timeout_kill_tree/, 'server must audit process-tree timeout cleanup');
+assert.match(server, /createOutputBuffer/, 'server must use bounded stdout/stderr buffers');
 
 console.log('extension compatibility checks passed');

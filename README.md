@@ -36,7 +36,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.10` makes the first run easier to understand and keeps the browser-to-bridge loop lighter on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.11` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -49,10 +49,16 @@ Version `v0.3.10` makes the first run easier to understand and keeps the browser
 - per-arm nonce checks so old `codex` blocks cannot be resurrected accidentally;
 - Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief;
 - the extension panel can generate Run Capsule `inbox` briefing files and copy the GPT thread brief;
-- the panel now includes a four-step start guide and a **Use starter text** button for safer first tasks.
-- Run Capsule runtime path segments preserve Unicode project / branch / run names while still replacing unsafe path characters.
-- the extension now uses adaptive polling: faster checks while a run is active, slower checks while idle, and a DOM-change nudge when ChatGPT posts a new message.
-- macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back, AegisLoop stays armed and waits for a fresh nonce `codex` block instead of falling back to Chat Mode. This is friendlier to slower 5.5 / Ultra reasoning replies while keeping the nonce gate intact.
+- the panel now includes a four-step start guide and a **Use starter text** button for safer first tasks;
+- Run Capsule runtime path segments preserve Unicode project / branch / run names while still replacing unsafe path characters;
+- the extension now uses adaptive polling: faster checks while a run is active, slower checks while idle, and a DOM-change nudge when ChatGPT posts a new message;
+- macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back, AegisLoop stays armed and waits for a fresh nonce `codex` block instead of falling back to Chat Mode;
+- bridge requests now time out cleanly instead of leaving the panel stuck in a forever-ticking state;
+- switching between ChatGPT conversation URLs resets transient route state and baselines the new thread before automation resumes;
+- unacknowledged Codex results block new dispatches, so a pending result cannot be overwritten;
+- successful results become hard duplicates only after ACK; failed results can be retried with a fresh arm nonce;
+- Codex timeout cleanup kills the process tree and stdout/stderr are bounded with ring buffers;
+- debug mode shows selector health for composer, send/stop controls, and latest message signatures.
 
 `/health` stays public for local checks. Sensitive APIs should use an `apiToken` when you run AegisLoop beyond a private throwaway setup.
 
@@ -288,6 +294,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.8 release notes: [docs/release-notes-v0.3.8.md](docs/release-notes-v0.3.8.md)
 - v0.3.9 release notes: [docs/release-notes-v0.3.9.md](docs/release-notes-v0.3.9.md)
 - v0.3.10 release notes: [docs/release-notes-v0.3.10.md](docs/release-notes-v0.3.10.md)
+- v0.3.11 release notes: [docs/release-notes-v0.3.11.md](docs/release-notes-v0.3.11.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
