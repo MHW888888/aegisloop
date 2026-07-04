@@ -88,7 +88,6 @@ Use this when you want to invite contributors to help with reliability, browser 
 ```powershell
 $env:GITHUB_TOKEN="your-fine-grained-token"
 npm run issues:stability
-Remove-Item Env:\GITHUB_TOKEN
 ```
 
 Preview without a token:
@@ -110,14 +109,34 @@ To invite the current stability contributors to specific tasks:
 ```powershell
 $env:GITHUB_TOKEN="your-fine-grained-token"
 npm run issues:assign-stability
-Remove-Item Env:\GITHUB_TOKEN
 ```
 
 This script verifies `/user` before it changes anything. If authentication fails, it stops immediately instead of printing a false success message.
+
+## Triage Recent Replies
+
+Use this when new contributors or spam-like comments appear on open issues:
+
+```powershell
+npm run issues:triage-replies
+```
+
+The default mode is read-only. It prints recent comments for the stability issues and classifies them as `normal`, `noise`, or `spam`.
+If GitHub rate-limits anonymous reads, set `GITHUB_TOKEN` before running the dry-run too; it will still avoid writes unless `-Apply` is passed.
+
+To delete high-confidence spam comments and reply to accepted contributor claims:
+
+```powershell
+$env:GITHUB_TOKEN="your-fine-grained-token"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\triage-github-replies.ps1 -Apply -DeleteSpam -ReplyAccepted
+```
+
+Use `-DeleteNoise` only after reviewing the dry-run output. Some low-quality comments may still be from real users.
 
 ## Safety Notes
 
 - Do not paste GitHub tokens into ChatGPT, Codex, issues, PRs, or docs.
 - Prefer `gh auth login --web`.
+- Keep `GITHUB_TOKEN` in your local PowerShell session if you are doing repeated maintainer actions.
 - If a token was pasted anywhere public or semi-public, revoke it in GitHub settings.
 - Review generated comments before posting when the issue involves security, user data, or project governance.

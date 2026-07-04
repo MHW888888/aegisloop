@@ -19,7 +19,8 @@
     "test:text": "node scripts/test-text-integrity.js",
     "test:unicode": "node scripts/test-unicode-runtime.js",
     "issues:stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-stability-issues.ps1",
-    "issues:assign-stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/assign-stability-issues.ps1"
+    "issues:assign-stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/assign-stability-issues.ps1",
+    "issues:triage-replies": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/triage-github-replies.ps1"
   },
   "keywords": [
     "codex",

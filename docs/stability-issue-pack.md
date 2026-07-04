@@ -74,7 +74,6 @@ Maintainers can create these issues with:
 ```powershell
 $env:GITHUB_TOKEN="your-fine-grained-token"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-stability-issues.ps1
-Remove-Item Env:\GITHUB_TOKEN
 ```
 
 Preview without a token:

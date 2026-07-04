@@ -100,6 +100,8 @@ The important part is not the loop itself. The important part is the **aegis** a
 
 ## Quick Start
 
+If you want the shortest safe path, start with the [3-minute Quickstart Card](docs/quickstart-card.md).
+
 The short path:
 
 1. Start the local bridge.

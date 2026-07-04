@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Quickstart and setup help
+    url: https://github.com/MHW888888/aegisloop/blob/main/docs/quickstart-card.md
+    about: Start here before opening a setup issue.
+  - name: Browser compatibility notes
+    url: https://github.com/MHW888888/aegisloop/blob/main/docs/browser-compatibility.md
+    about: Check current Chrome, Edge, Brave, Firefox, and Tor status.

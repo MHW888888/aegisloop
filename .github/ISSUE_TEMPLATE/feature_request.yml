@@ -3,6 +3,12 @@ description: Suggest a focused improvement for AegisLoop
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a focused improvement.
+
+        Please do not post ads, payment links, wallet addresses, generic AI-generated analysis, tokens, real conversation ids, or private local paths. Spam or solicitation may be deleted.
   - type: textarea
     id: problem
     attributes:

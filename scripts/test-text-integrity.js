@@ -5,37 +5,52 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 
+function walk(relativeDir, predicate, results = []) {
+  const absoluteDir = path.join(ROOT, relativeDir);
+  if (!fs.existsSync(absoluteDir)) return results;
+
+  for (const entry of fs.readdirSync(absoluteDir, { withFileTypes: true })) {
+    const relative = path.join(relativeDir, entry.name);
+    if (entry.isDirectory()) {
+      walk(relative, predicate, results);
+    } else if (predicate(relative)) {
+      results.push(relative.replace(/\\/g, '/'));
+    }
+  }
+
+  return results;
+}
+
 const textFiles = [
-  'README.md',
-  'docs/first-run.md',
-  'docs/onboarding.md',
-  'docs/troubleshooting.md',
-  'docs/dual-briefing.md',
-  'docs/browser-compatibility.md',
-  'docs/macos.md',
-  'docs/maintainer-automation.md',
-];
+  ...fs.readdirSync(ROOT)
+    .filter((name) => name.endsWith('.md'))
+    .sort(),
+  ...walk('docs', (relative) => relative.endsWith('.md')),
+  ...walk('.github', (relative) => /\.(md|yml|yaml)$/.test(relative)),
+].sort();
 
 const suspiciousFragments = [
   '\uFFFD',
-  'Ã',
-  'Â',
-  'â€™',
-  'â€œ',
-  'â€',
+  '脙',
+  '脗',
   '鈥',
   '涓',
-  '鍙',
-  '瀹',
-  '璇',
-  '绋',
-  '濡',
+  '鏅',
+  '绗',
   '娉',
-  '鐢',
-  '妗',
-  '侰',
-  '乥',
-  '乺',
+  '鍙',
+  '閳',
+  '娑',
+  '閸',
+  '鐎',
+  '鐠',
+  '缁',
+  '婵',
+  '濞',
+  '閻',
+  '濡',
+  '渚',
+  '涔',
 ];
 
 function read(relative) {
@@ -93,6 +108,13 @@ const browserCompatibility = read('docs/browser-compatibility.md');
 for (const expected of ['Microsoft Edge', 'Tor Browser', 'https://support.torproject.org/tor-browser/features/plugins/']) {
   if (!browserCompatibility.includes(expected)) {
     fail(`docs/browser-compatibility.md should mention ${expected}`);
+  }
+}
+
+const quickstart = read('docs/quickstart-card.md');
+for (const expected of ['中文速记', 'Arm one run', 'Do not mix normal Q&A and automation']) {
+  if (!quickstart.includes(expected)) {
+    fail(`docs/quickstart-card.md should mention ${expected}`);
   }
 }
 

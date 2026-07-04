@@ -140,8 +140,8 @@ If any answer is unclear, stay in Chat Mode.
 最稳的用法：
 
 ```text
-普通聊天 = Chat Mode，不执行
-执行线程 = Runner thread，只跑一个项目分支
+普通聊天 = Chat Mode，不执行本地任务
+执行线程 = Runner thread，只绑定一个项目 / 分支 / 目标
 第一步 = npm run doctor
 第二步 = Generate briefing / Copy GPT brief
 第三步 = Use starter text
@@ -152,5 +152,5 @@ If any answer is unclear, stay in Chat Mode.
 
 - 不建议在同一个 ChatGPT 对话里一边普通问答、一边自动执行。
 - 一个 runner thread 最好只绑定一个项目、一个分支、一个目标。
-- 不确定时先用 **Arm one run**，不要直接 **Arm loop**。
-- 用完或跑偏时点 **Freeze**，然后新开一个 runner thread。
+- 不确定时先用 **Arm one run**，不要直接用 **Arm loop**。
+- 用完、跑偏、或任务结束时点 **Freeze**，然后新开一个 runner thread。

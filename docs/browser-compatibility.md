@@ -56,6 +56,17 @@ npm run test:browser:windows
 
 This opens installed Chrome/Edge in headless mode with the unpacked extension loaded. It does not prove ChatGPT DOM compatibility, but it catches manifest-level loading problems early.
 
+## Brave Notes
+
+Brave is close to Chrome, but its privacy shields can change behavior around ChatGPT, third-party scripts, and localhost access.
+
+When testing Brave:
+
+- keep Shields on first and record failures;
+- then retry with Shields relaxed for `chatgpt.com`;
+- confirm `http://127.0.0.1:17380/health` works in the same browser profile;
+- note whether the extension panel sees **Local bridge: online**.
+
 ## Firefox / Tor Notes
 
 Do not claim Firefox or Tor support until there is a separate tested package.
@@ -80,11 +91,11 @@ Tor Browser should not be the default recommendation for AegisLoop. AegisLoop is
 
 ## 中文速记
 
-AegisLoop 目前应按这个优先级测试浏览器：
+AegisLoop 目前按这个顺序做浏览器兼容测试最稳：
 
-1. **Chrome**：主目标。
+1. **Chrome**：主目标，优先保证稳定。
 2. **Edge**：最值得马上补测，路径和 Chrome 很接近。
-3. **Brave / 其他 Chromium 浏览器**：可以试，但要注意隐私盾牌可能影响 ChatGPT 或本地 bridge。
+3. **Brave / 其他 Chromium 浏览器**：可以试，但要记录隐私盾牌、localhost、ChatGPT 注入是否影响插件。
 4. **Firefox**：不要直接承诺支持，需要单独 WebExtensions 适配和测试。
 5. **Tor Browser / 洋葱浏览器**：不建议作为常规使用目标。Tor 官方不鼓励安装额外扩展，因为可能削弱隐私和指纹保护。
 

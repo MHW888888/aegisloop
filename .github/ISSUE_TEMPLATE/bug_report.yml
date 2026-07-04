@@ -3,6 +3,12 @@ description: Report a reproducible problem in AegisLoop
 title: "[Bug]: "
 labels: ["bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve AegisLoop.
+
+        Please do not post ads, payment links, wallet addresses, generic AI-generated analysis, tokens, real conversation ids, or private local paths. Spam or solicitation may be deleted.
   - type: textarea
     id: what-happened
     attributes:

@@ -36,10 +36,34 @@ Please keep changes aligned with the project model:
 - same-workspace jobs should not write concurrently;
 - auditability matters more than invisible automation.
 
+## Comment And PR Quality
+
+AI-assisted contributions are welcome, but please keep them specific and verifiable.
+
+Avoid:
+
+- generic AI-generated analysis with no repo-specific evidence;
+- ads, payment links, wallet addresses, or solicitation;
+- comments that only say "add error handling" or "add comments" without a concrete patch or test plan;
+- screenshots with tokens, real conversation ids, private local paths, or private workspace data.
+
+Good comments usually include:
+
+- the file or workflow you tested;
+- the browser / OS / AegisLoop version when relevant;
+- a small reproduction or screenshot;
+- the exact docs or code change you plan to make.
+
 ## 中文说明
 
-欢迎提交 PR。这个项目优先接受小而清晰、能验证、容易 review 的改动。
+欢迎提交 PR。这个项目优先接受小而清晰、可验证、容易 review 的改动。
 
-请不要提交本地私有配置、日志、真实 conversation id、真实 workspace 路径或任何 token。
+请不要提交或粘贴：
+
+- 本地私有配置；
+- 日志里的 token；
+- 真实 conversation id；
+- 真实 workspace 路径；
+- 钱包地址、付款链接、广告或泛泛的 AI 分析。
 
 如果你不确定某个改动是否会扩大本地执行权限，请先开 issue 讨论。
