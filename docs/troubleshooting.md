@@ -104,3 +104,15 @@ If ChatGPT changes its web UI, the extension may fail to find the composer, send
 Open the panel debug mode and check the browser console for `[LE]` logs.
 
 The likely fix is updating the selector block in `chrome-extension/content.js`.
+
+## Browser Compatibility
+
+If AegisLoop works in Chrome but fails in another browser:
+
+- try Microsoft Edge before Firefox/Tor;
+- confirm the browser can load unpacked extensions;
+- confirm `http://127.0.0.1:17380/health` opens in that browser;
+- disable privacy shields for the ChatGPT tab only, if the browser has them;
+- avoid Tor Browser for normal AegisLoop use because extra add-ons can weaken Tor's privacy model.
+
+See [browser compatibility](browser-compatibility.md) for the current support matrix.

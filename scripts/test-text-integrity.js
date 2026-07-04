@@ -11,6 +11,7 @@ const textFiles = [
   'docs/onboarding.md',
   'docs/troubleshooting.md',
   'docs/dual-briefing.md',
+  'docs/browser-compatibility.md',
   'docs/macos.md',
   'docs/maintainer-automation.md',
 ];
@@ -85,6 +86,13 @@ const macSetup = read('scripts/setup-macos.sh');
 for (const expected of ['npm run doctor', 'config.example.json', 'npm start', 'chrome://extensions']) {
   if (!macSetup.includes(expected)) {
     fail(`scripts/setup-macos.sh should mention ${expected}`);
+  }
+}
+
+const browserCompatibility = read('docs/browser-compatibility.md');
+for (const expected of ['Microsoft Edge', 'Tor Browser', 'https://support.torproject.org/tor-browser/features/plugins/']) {
+  if (!browserCompatibility.includes(expected)) {
+    fail(`docs/browser-compatibility.md should mention ${expected}`);
   }
 }
 

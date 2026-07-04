@@ -4,6 +4,8 @@ This guide is for the first three minutes with AegisLoop.
 
 For a more practical "what should I type first?" guide, see [onboarding.md](onboarding.md).
 
+Chrome is the primary browser target. Microsoft Edge is the next recommended browser to try because it can load unpacked Chromium extensions. For Firefox, Tor Browser, and other browsers, see [browser compatibility](browser-compatibility.md) before promising support.
+
 The safest mental model:
 
 ```text
