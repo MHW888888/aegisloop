@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.6';
+  const CONTENT_VERSION = '0.3.7';
   const CONTRACT_VERSION = 'le-3.3';
   const FAST_POLL_MS = 800;
   const IDLE_POLL_MS = 3500;
@@ -98,8 +98,8 @@
   // it back onto the protocol. Bounded by MAX_REFORMAT so it never spams.
   function reformatMsg() {
     return [
-      '[AegisLoop] Your last reply had no usable ```codex block.',
-      'Reply with ONLY one JSON ```codex block containing arm_nonce="' + (LE.armNonce || 'ARM_NONCE_FROM_PANEL') + '" and the next instruction,',
+      '[AegisLoop] Your last reply had no usable fenced codex block.',
+      'Reply with ONLY one JSON fenced codex block containing arm_nonce="' + (LE.armNonce || 'ARM_NONCE_FROM_PANEL') + '" and the next instruction,',
       'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
     ].join('\n');
   }

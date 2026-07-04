@@ -8,11 +8,12 @@
   "scripts": {
     "start": "node server.js",
     "start:bridge": "node server.js",
-    "check": "node --check server.js && node --check config-validation.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-config-validation.js && node --check scripts/test-text-integrity.js && node --check scripts/test-unicode-runtime.js && node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-text-integrity.js && node scripts/test-unicode-runtime.js",
+    "check": "node --check server.js && node --check config-validation.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-api-flow.js && node --check scripts/test-config-validation.js && node --check scripts/test-text-integrity.js && node --check scripts/test-unicode-runtime.js && node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-text-integrity.js && node scripts/test-api-flow.js && node scripts/test-unicode-runtime.js",
     "doctor": "node scripts/doctor.js",
     "setup:mac": "sh scripts/setup-macos.sh",
     "test:config": "node scripts/test-config-validation.js",
     "test:briefing": "node scripts/test-briefing-materializer.js",
+    "test:api": "node scripts/test-api-flow.js",
     "test:text": "node scripts/test-text-integrity.js",
     "test:unicode": "node scripts/test-unicode-runtime.js"
   },
