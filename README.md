@@ -269,6 +269,7 @@ These files are local runtime state and are ignored by git:
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
 - Demo contributor issue pack: [docs/demo-issue-pack.md](docs/demo-issue-pack.md)
+- Maintainer automation: [docs/maintainer-automation.md](docs/maintainer-automation.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 中文说明
