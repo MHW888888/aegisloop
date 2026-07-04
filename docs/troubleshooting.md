@@ -99,6 +99,8 @@ If the model says "I cannot access tools" or "no tool is available", reply with:
 Do not call a ChatGPT tool. AegisLoop is watching this page for a fenced codex JSON block. Reply with only one fenced codex block containing the next local Codex instruction, or <<<LOOP_STOP>>>.
 ```
 
+For a repeatable 5.3 / 5.5 Pro smoke test, see [model compatibility](model-compatibility.md).
+
 ## codex block ignored
 
 AegisLoop ignores old blocks and blocks without the current arm nonce.

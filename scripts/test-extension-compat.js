@@ -43,5 +43,8 @@ assert.match(content, /normalizeBridgeUrlForPanel/, 'content must validate bridg
 assert.match(content, /Bridge URL must point to 127\.0\.0\.1 or localhost/, 'content must reject non-local bridge hosts');
 assert.match(content, /Bridge URL must include the local bridge port/, 'content must require an explicit local bridge port');
 assert.match(content, /bridgeUrl: LE\.bridgeUrl/, 'content must forward configured bridge URL to background');
+assert.match(content, /AegisLoop is NOT a built-in ChatGPT tool/, 'contract must explain AegisLoop is not a ChatGPT tool');
+assert.match(content, /Do not call ChatGPT tools/, 'starter text must tell models not to call ChatGPT tools');
+assert.match(content, /fenced codex JSON block/, 'contract must teach page-text codex block behavior');
 
 console.log('extension compatibility checks passed');

@@ -121,6 +121,8 @@ npm start
 
 For browser support beyond Chrome, see [docs/browser-compatibility.md](docs/browser-compatibility.md). Chrome is the primary target, Edge is the next recommended compatibility target, and Firefox/Tor should be treated as experimental until separately packaged and tested.
 
+If a ChatGPT Pro or reasoning model says it cannot find the tool, see [docs/model-compatibility.md](docs/model-compatibility.md). AegisLoop does not use a built-in ChatGPT tool call; it reads a fenced `codex` JSON block from the page.
+
 ### 1. Clone
 
 ```powershell

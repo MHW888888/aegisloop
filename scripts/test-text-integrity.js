@@ -118,6 +118,24 @@ for (const expected of ['中文速记', 'Arm one run', 'Do not mix normal Q&A an
   }
 }
 
+const modelCompatibility = read('docs/model-compatibility.md');
+for (const expected of ['not a built-in ChatGPT tool', '5.3', '5.5 Pro', 'Correction Prompt']) {
+  if (!modelCompatibility.includes(expected)) {
+    fail(`docs/model-compatibility.md should mention ${expected}`);
+  }
+}
+
+const modelIssueTemplate = read('.github/ISSUE_TEMPLATE/model_compatibility.yml');
+for (const expected of [
+  '"Pass: valid codex block on first try"',
+  '"Warn: valid after correction prompt"',
+  '"Fail: cannot produce valid codex block after nudges"',
+]) {
+  if (!modelIssueTemplate.includes(expected)) {
+    fail(`model compatibility issue template should quote dropdown option ${expected}`);
+  }
+}
+
 if (!process.exitCode) {
   console.log('text integrity checks passed');
 }

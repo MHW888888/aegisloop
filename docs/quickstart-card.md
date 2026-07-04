@@ -190,3 +190,4 @@ Common fixes:
 - confirm the bridge URL is `http://127.0.0.1:<port>`;
 - use a fresh runner thread instead of a long mixed chat;
 - prefer **Arm one run** over **Arm loop** while debugging.
+- if a model says it cannot find the tool, read [model-compatibility.md](model-compatibility.md).

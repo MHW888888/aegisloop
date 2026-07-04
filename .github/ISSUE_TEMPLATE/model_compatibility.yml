@@ -1,0 +1,54 @@
+name: Model compatibility report
+description: Report whether a ChatGPT model follows the AegisLoop codex block contract
+title: "[Model]: "
+labels: ["compatibility", "model"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for model-specific behavior such as "5.5 Pro says it cannot find the tool" or "5.3 emits a valid codex block".
+
+        Please do not post tokens, real conversation ids, private local paths, screenshots with secrets, ads, payment links, or wallet addresses.
+  - type: input
+    id: model
+    attributes:
+      label: Model / mode tested
+      placeholder: "Example: 5.3, 5.5 Pro, reasoning mode"
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - "Pass: valid codex block on first try"
+        - "Warn: valid after correction prompt"
+        - "Fail: cannot produce valid codex block after nudges"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Test steps
+      description: Use docs/model-compatibility.md if possible.
+      placeholder: |
+        1. Started local bridge
+        2. Opened fresh runner thread
+        3. Selected model ...
+        4. Used starter text
+        5. Clicked Arm one run
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Describe whether the model emitted a codex block, claimed no tool was available, or needed a correction prompt.
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized-output
+    attributes:
+      label: Sanitized output excerpt
+      description: Optional. Remove conversation ids, local paths, tokens, and private workspace content.
+      render: text
