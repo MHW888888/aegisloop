@@ -263,6 +263,9 @@ These files are local runtime state and are ignored by git:
 - v0.3.4 release notes: [docs/release-notes-v0.3.4.md](docs/release-notes-v0.3.4.md)
 - v0.3.5 release notes: [docs/release-notes-v0.3.5.md](docs/release-notes-v0.3.5.md)
 - v0.3.6 release notes: [docs/release-notes-v0.3.6.md](docs/release-notes-v0.3.6.md)
+- Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
+- Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
+- Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 中文说明

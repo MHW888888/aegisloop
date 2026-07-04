@@ -1,85 +1,92 @@
 # AegisLoop Launch Posts
 
+Ready-to-copy posts for sharing AegisLoop. Keep the tone practical: no hype, no fake benchmarks, no spam.
+
+Repository: https://github.com/MHW888888/aegisloop
+
 ## English Short Post
 
-I just released AegisLoop, a guarded local bridge that lets ChatGPT plan and Codex execute in a real local workspace.
+I just released AegisLoop, a guarded local bridge that lets ChatGPT plan and local Codex execute in a real workspace.
 
-It connects a ChatGPT web conversation to a local Codex session, then adds the parts I kept needing in practice: local gates, workspace locks, dedupe, and audit logs.
-
-GitHub: https://github.com/MHW888888/aegisloop
-
-## English v0.2.0 Lite Post
-
-AegisLoop v0.2.0 is out: a simpler "Lite" pass focused on first-run clarity.
-
-The project still does the same thing: ChatGPT plans, local Codex executes, and a local bridge keeps the loop bounded with gates, workspace locks, dedupe, and audit logs.
-
-This release makes it easier to understand and try: clearer README positioning, friendlier extension labels, a first-run guide, and troubleshooting docs.
+It keeps the loop local-first and bounded with safety gates, workspace locks, dedupe, ACK/NACK result handling, Run Capsules, and audit logs.
 
 GitHub: https://github.com/MHW888888/aegisloop
 
-## English v0.3.0 Parallel Safe Mode Post
+## English v0.3.6 Post
 
-AegisLoop v0.3.0 adds Parallel Safe Mode.
+AegisLoop v0.3.6 is live.
 
-The problem: two ChatGPT conversations can be separated by conversation id, but still collide semantically if they read the same project and use the same stage names.
+It is a local-first ChatGPT-to-Codex bridge: ChatGPT plans the next step, Codex executes locally, and AegisLoop carries results back with gates, locks, dedupe, audit logs, and Run Capsules.
 
-Run Capsules add `projectId`, `activeBranch`, `runId`, and an external write root. In readonly mode, Codex runs from that external root while treating the source project as read-only context.
+This version improves the browser-to-bridge path with adaptive polling: faster checks while a run is active, slower checks while idle, and DOM-change nudges when ChatGPT posts a new message.
 
 GitHub: https://github.com/MHW888888/aegisloop
 
 ## English Longer Post
 
-I built AegisLoop because I wanted a safer way to run ChatGPT x Codex loops.
+I built AegisLoop because I wanted a safer way to run ChatGPT x Codex engineering loops.
 
-The idea is simple:
+The flow is simple:
 
-- ChatGPT plans the next step.
-- Codex executes locally.
-- AegisLoop carries the result back.
-- Local gates decide what is allowed to continue.
+- ChatGPT plans the next local task.
+- Codex executes it in a real local workspace.
+- AegisLoop sends the result back to ChatGPT.
+- Local gates decide whether the next step is allowed.
 
-It is local-first, bound by config, and includes workspace locking, content-hash dedupe, denylist gates, and JSONL audit logs.
-
-It is not meant to be magic. It is meant to make agentic workflows more inspectable.
+It is not trying to be a full agent platform. It is a small local control plane for people who want browser-based planning plus local execution, with guardrails: Chat Mode by default, explicit arming, nonce checks, workspace locks, Run Capsules, result ACK/NACK, dedupe, and JSONL audit logs.
 
 GitHub: https://github.com/MHW888888/aegisloop
+
+## Show HN Draft
+
+Title:
+
+```text
+Show HN: AegisLoop - a guarded ChatGPT-to-Codex local automation bridge
+```
+
+Body:
+
+```text
+I built AegisLoop to connect a ChatGPT web conversation to a local Codex session.
+
+The goal is not fully unbounded autonomy. The goal is a bounded loop:
+ChatGPT plans the next step, Codex executes locally, and a local bridge sends the result back with gates, workspace locks, dedupe, Run Capsules, and audit logs.
+
+It is local-first, MIT licensed, and currently focused on safer first-run onboarding and multi-thread run isolation.
+
+GitHub: https://github.com/MHW888888/aegisloop
+```
 
 ## 中文短帖
 
-记录一个小项目：AegisLoop。
-它是一个 ChatGPT x Codex 的本地自动化桥，让 ChatGPT 负责规划和复盘，让 Codex 在本地项目里执行，同时加上本地闸门、工作区锁、去重和审计日志。
-不是为了“完全无人驾驶”，而是为了让自动化循环更可控、更可追踪。
+我整理发布了一个小项目：AegisLoop。
+
+它是一个 ChatGPT x Codex 的本地自动化桥：ChatGPT 负责规划下一步，Codex 在本地项目里执行，AegisLoop 负责把结果带回去，同时加上本地安全闸门、工作区锁、去重、Run Capsule 和审计日志。
+
+它不是为了“完全无人驾驶”，而是为了让多轮工程自动化更可控、更可追踪。
 
 GitHub: https://github.com/MHW888888/aegisloop
 
-## 中文 v0.2.0 Lite 版
+## 中文 v0.3.6 帖
 
-AegisLoop v0.2.0 发了，这版重点不是堆复杂功能，而是做“亲民 Lite 版”。
+AegisLoop v0.3.6 更新了。
 
-它还是那个核心思路：ChatGPT 负责规划，本地 Codex 负责执行，中间由本地 bridge 加安全闸门、工作区锁、去重和审计日志。
+一句话：让 ChatGPT 负责规划，让本地 Codex 负责执行，中间用本地 bridge 加安全闸门、工作区锁、去重、ACK/NACK、Run Capsule 和审计日志。
 
-这版主要改了 README 首屏表达、扩展面板文案、首次运行指南和排错文档，让第一次看到的人更容易理解，也更敢上手。
-
-GitHub: https://github.com/MHW888888/aegisloop
-
-## 中文 v0.3.0 Parallel Safe Mode 版
-
-AegisLoop v0.3.0 加了 Parallel Safe Mode。
-
-之前的问题是：两个 ChatGPT 对话虽然传输层按 conversation id 分开，但如果读同一个项目目录、阶段名又都叫 F8/F9，就会在项目语义层撞车。
-
-Run Capsule 会给每个线程加上 `projectId`、`activeBranch`、`runId` 和外部写入目录。readonly 模式下，Codex 从外部 runtime 目录执行，把原项目当只读上下文，降低多线程跑串线的风险。
+这版主要优化浏览器到本地 bridge 的通路：运行中检查更快，空闲时更安静，ChatGPT 页面有新回复时会更快触发检查。
 
 GitHub: https://github.com/MHW888888/aegisloop
 
 ## 中文朋友圈版
 
-记录一下，第一个正式整理发布到 GitHub 的小项目：AegisLoop。
+记录一下，最近把一个真实工作流里长出来的小工具整理到了 GitHub：AegisLoop。
 
-它是我最近做的一个 ChatGPT x Codex 本地自动化桥：ChatGPT 负责规划和复盘，Codex 负责本地执行，中间加上安全闸门、工作区锁、去重和审计日志。
+它做的事很直接：ChatGPT 规划下一步，本地 Codex 执行，AegisLoop 在中间负责连接、回传结果和加安全边界。
 
-不算大，但它是真实从自己的工作流里长出来的。先开源出来，继续慢慢打磨。
+我最关心的不是“让 AI 自动乱跑”，而是让多轮工程任务可控：默认 Chat Mode、显式 Arm、nonce、防旧指令复活、workspace lock、Run Capsule、审计日志。
+
+目前还在早期，但已经能作为一个 local-first 的 ChatGPT-to-Codex control plane 使用。
 
 GitHub: https://github.com/MHW888888/aegisloop
 
