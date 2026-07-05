@@ -94,9 +94,9 @@ If there is no block, type the first instruction in the AegisLoop panel and clic
 Arm one run
 ```
 
-This asks ChatGPT for a fresh block with the current nonce.
+This asks ChatGPT for a fresh block with the current `armId` and turn token.
 
-If the panel says the seed send was not confirmed but still armed, do not reconnect the thread. AegisLoop is keeping the current route alive while waiting for a fresh nonce `codex` block. This can happen with slower 5.5 / Ultra reasoning replies or when ChatGPT's page DOM does not expose the sent user-message bubble quickly.
+If the panel says the seed send was not confirmed but still armed, do not reconnect the thread. AegisLoop is keeping the current route alive while waiting for a fresh turn-token `codex` block. This can happen with slower 5.5 / Ultra reasoning replies or when ChatGPT's page DOM does not expose the sent user-message bubble quickly.
 
 AegisLoop now appends a unique `aegisloop_msg_id` line to its own protocol messages so it can confirm the exact user bubble. Do not manually copy that id into another thread.
 
@@ -110,7 +110,9 @@ AegisLoop reads plain text from the ChatGPT page. The model only needs to write 
 ```codex
 {
   "aegisloop": true,
-  "arm_nonce": "CURRENT_NONCE_FROM_PANEL",
+  "arm_id": "CURRENT_ARM_ID_FROM_PANEL",
+  "turn_nonce": "CURRENT_TURN_TOKEN_FROM_PANEL",
+  "arm_nonce": "CURRENT_TURN_TOKEN_FROM_PANEL",
   "prompt": "Read the project and summarize the safest next step. Do not modify files."
 }
 ```
@@ -126,7 +128,7 @@ For a repeatable 5.3 / 5.5 Pro smoke test, see [model compatibility](model-compa
 
 ## codex block ignored
 
-AegisLoop ignores old blocks and blocks without the current arm nonce.
+AegisLoop ignores old blocks and blocks without the current `armId` and turn token.
 
 Try:
 
@@ -134,7 +136,17 @@ Try:
 2. Ask ChatGPT to resend only one fresh `codex` block.
 3. Avoid using a runner thread for normal Q&A after arming it.
 
-Putting the nonce somewhere inside the prompt text is not enough. The JSON block must include the current nonce as `arm_nonce` or `armNonce`.
+The turn token is visible and non-secret. It is only a freshness marker, not authentication.
+
+Putting the turn token somewhere inside the prompt text is not enough. The JSON block must include the current `arm_id` and `turn_nonce`. The local bridge only trusts structured dispatch fields sent by the extension; prompt text that merely contains the token is blocked.
+
+Common token boundary errors:
+
+- `arm_id_mismatch`: the block belongs to a different armed route.
+- `missing_turn_nonce`: the JSON did not include the current turn token.
+- `turn_nonce_mismatch`: the token is stale or from another turn.
+- `nonce_replay_blocked`: the turn token was already used once.
+- `turn_nonce_expired`: the armed route expired; arm the thread again.
 
 ## Result appears twice
 
@@ -208,7 +220,7 @@ The snapshot is designed for issue comments and does not include raw prompts, ra
 
 - AegisLoop content/protocol version;
 - local bridge origin, not full private config;
-- hashed ChatGPT conversation id and hashed arm nonce;
+- hashed ChatGPT conversation id, hashed `armId`, and hashed turn token;
 - current tab client id short form;
 - leader status and lease time remaining;
 - mode, local state, loop state, and last surfaced error;

@@ -58,8 +58,8 @@ assert.match(content, /keep this route and ask it for a visible codex JSON block
 assert.match(content, /LE\.codexSessionId = me\.codexSessionId \|\| LE\.codexSessionId/, 'panel route display must refresh Codex session id from bridge state');
 assert.match(content, /LE\.workspaceDir = me\.workspaceDir \|\| LE\.workspaceDir/, 'panel route display must refresh workspace from bridge state');
 assert.match(content, /LE\.fullAuto = me\.fullAuto !== false/, 'panel route display must refresh automation flag from bridge state');
-assert.match(content, /currentFreshReadyCodex/, 'seed submit confirmation must accept a fresh nonce codex fallback');
-assert.match(content, /seed submit not confirmed by user bubble, but fresh nonce codex block seen/, 'seed fallback must log fresh nonce codex confirmation');
+assert.match(content, /currentFreshReadyCodex/, 'seed submit confirmation must accept a fresh turn-token codex fallback');
+assert.match(content, /seed submit not confirmed by user bubble, but fresh turn-token codex block seen/, 'seed fallback must log fresh turn-token codex confirmation');
 assert.match(content, /SEED_FRESH_CODEX_CONFIRM_MS = 15000/, 'seed fallback must allow slow model replies before pausing');
 assert.match(content, /waitForFreshReadyCodex\(SEED_FRESH_CODEX_CONFIRM_MS\)/, 'seed fallback must use the shared fresh codex confirmation timeout');
 assert.match(content, /seedSubmitUnconfirmed/, 'seed fallback must expose an unconfirmed-but-armed state');
@@ -105,7 +105,8 @@ assert.match(content, /looksLikeToolUnavailable/, 'content must classify tool-un
 assert.match(content, /debugSnapshot/, 'content must provide a sanitized debug snapshot');
 assert.match(content, /Export Debug Snapshot/, 'panel must expose debug snapshot export');
 assert.match(content, /conversationIdHash/, 'debug snapshot must hash conversation ids');
-assert.match(content, /armNonceHash/, 'debug snapshot must hash arm nonces');
+assert.match(content, /armIdHash/, 'debug snapshot must hash arm ids');
+assert.match(content, /turnNonceHash/, 'debug snapshot must hash turn tokens');
 assert.match(content, /lastSubmitMsgId/, 'debug snapshot must expose submit marker metadata without raw prompts');
 
 assert.match(server, /pending_result_exists/, 'server must block new dispatches while a result is pending');
@@ -126,8 +127,10 @@ assert.match(server, /AEGISLOOP_ALLOW_NO_TOKEN/, 'server must require an explici
 assert.match(server, /debugAuditRaw/, 'audit raw text must be debug-gated');
 assert.match(server, /STATE_BAK_PATH/, 'server must keep a state backup');
 assert.match(server, /STATE_PATH \+ '\.bad\.'/, 'server must quarantine corrupt state files');
-assert.match(server, /providedNonce !== conversation\.armNonce/, 'dispatch nonce must match body armNonce exactly');
-assert.doesNotMatch(server, /prompt\)\.includes\(conversation\.armNonce\)/, 'dispatch must not accept nonce only because it appears in prompt text');
+assert.match(server, /providedTurnNonce !== conversation\.turnNonce/, 'dispatch turn token must match structured body turnNonce exactly');
+assert.match(server, /providedArmId !== conversation\.armId/, 'dispatch arm id must match structured body armId exactly');
+assert.match(server, /nonce_replay_blocked/, 'dispatch must block used turn-token replay');
+assert.doesNotMatch(server, /includes\(conversation\.(armNonce|turnNonce)\)/, 'dispatch must not accept a token only because it appears in prompt text');
 
 assert.match(doctor, /extension localhost permissions/, 'doctor must warn about broad localhost extension permissions');
 assert.match(doctor, /keep apiToken enabled/, 'doctor must recommend apiToken when localhost permissions are broad');

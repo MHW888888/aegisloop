@@ -7,7 +7,9 @@ function canDispatch(s) {
     && s.mode !== 'frozen'
     && s.local !== 'needs_user_protocol_fix'
     && s.leader === true
-    && s.armValid === true
+    && s.armIdMatches === true
+    && s.turnNonceValid === true
+    && s.turnNonceUsed === false
     && s.pendingResult === false;
 }
 
@@ -33,7 +35,9 @@ const base = {
   mode: 'armed',
   local: 'awaiting_assistant',
   leader: true,
-  armValid: true,
+  armIdMatches: true,
+  turnNonceValid: true,
+  turnNonceUsed: false,
   pendingResult: false,
   resultIdMatches: true,
   hasCodex: true,
@@ -44,11 +48,13 @@ const base = {
   maxReformat: 3,
 };
 
-assert.strictEqual(canDispatch(base), true, 'armed leader with valid nonce can dispatch');
+assert.strictEqual(canDispatch(base), true, 'armed leader with current turn token can dispatch');
 assert.strictEqual(canDispatch({ ...base, mode: 'chat' }), false, 'chat mode cannot dispatch');
 assert.strictEqual(canDispatch({ ...base, leader: false }), false, 'non-leader cannot dispatch');
 assert.strictEqual(canDispatch({ ...base, pendingResult: true }), false, 'pending result blocks new dispatch');
-assert.strictEqual(canDispatch({ ...base, armValid: false }), false, 'expired or mismatched arm nonce cannot dispatch');
+assert.strictEqual(canDispatch({ ...base, armIdMatches: false }), false, 'wrong armId cannot dispatch');
+assert.strictEqual(canDispatch({ ...base, turnNonceValid: false }), false, 'expired or mismatched turn token cannot dispatch');
+assert.strictEqual(canDispatch({ ...base, turnNonceUsed: true }), false, 'used turn token cannot be replayed');
 assert.strictEqual(canDispatch({ ...base, local: 'needs_user_protocol_fix' }), false, 'protocol-fix state cannot dispatch');
 
 assert.strictEqual(canAckOrNack({ ...base, pendingResult: true }), true, 'leader can ACK matching pending result');

@@ -15,6 +15,9 @@ for (const expected of [
   'delivery_attempted',
   'dom_confirmed',
   'ack_sent',
+  'turn_nonce',
+  'turnNonceHash',
+  'nonce_replay_blocked',
   'result_delivery_unconfirmed',
   'Not leader',
 ]) {
@@ -26,7 +29,9 @@ class LoopHarness {
     this.mode = 'armed';
     this.local = 'idle';
     this.leader = true;
-    this.armValid = true;
+    this.armId = 'arm-1';
+    this.turnNonce = 'turn-1';
+    this.usedTurnTokens = new Set();
     this.pendingResult = null;
     this.acked = new Set();
     this.userBubbles = [];
@@ -51,16 +56,20 @@ class LoopHarness {
     this.assistantStableForMs = 0;
     this.events.push('assistant_streaming');
   }
-  assistantCodex(nonce) {
+  assistantCodex(armId, turnNonce) {
     this.streaming = false;
-    this.assistantText = '```codex\n{"aegisloop":true,"arm_nonce":"' + nonce + '","prompt":"Read files only."}\n```';
+    this.assistantText = '```codex\n{"aegisloop":true,"arm_id":"' + armId + '","turn_nonce":"' + turnNonce + '","arm_nonce":"' + turnNonce + '","prompt":"Read files only."}\n```';
     this.assistantStableForMs = 10000;
     this.events.push('assistant_codex');
   }
-  dispatch() {
+  dispatch(armId = this.armId, turnNonce = this.turnNonce) {
     assert.strictEqual(this.leader, true, 'only leader dispatches');
-    assert.strictEqual(this.armValid, true, 'arm nonce must be valid');
+    assert.strictEqual(armId, this.armId, 'armId must match');
+    assert.strictEqual(this.usedTurnTokens.has(turnNonce), false, 'turn token must not replay');
+    assert.strictEqual(turnNonce, this.turnNonce, 'turn token must match');
     assert.strictEqual(this.pendingResult, null, 'pending result blocks dispatch');
+    this.usedTurnTokens.add(turnNonce);
+    this.turnNonce = 'turn-' + (this.usedTurnTokens.size + 1);
     this.local = 'dispatching';
     this.events.push('dispatch');
   }
@@ -113,8 +122,9 @@ happy.arm();
 happy.seed('seed-1');
 happy.assistantStreaming('thinking...');
 assert.strictEqual(happy.maybeRepairNoCodex(), 'wait_streaming', 'streaming assistant is not nudged');
-happy.assistantCodex('nonce-1');
-happy.dispatch();
+happy.assistantCodex('arm-1', 'turn-1');
+happy.dispatch('arm-1', 'turn-1');
+assert.throws(() => happy.dispatch('arm-1', 'turn-1'), /turn token must not replay/, 'used turn token cannot replay');
 happy.receiveResult('result-1');
 happy.insertResult('result-1', true);
 happy.ack('result-1');

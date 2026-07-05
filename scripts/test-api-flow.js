@@ -55,6 +55,19 @@ async function waitForResult(base, token, conversationId) {
   throw new Error('timed out waiting for pending result');
 }
 
+function dispatchBody(conversationId, clientId, arm, prompt, overrides = {}) {
+  return JSON.stringify({
+    conversationId,
+    clientId,
+    prompt,
+    armId: arm && arm.armId,
+    turnNonce: arm && arm.turnNonce,
+    assistantMessageSig: 'assistant-sig-test',
+    codeBlockHash: 'code-block-hash-test',
+    ...overrides,
+  });
+}
+
 async function main() {
   const port = await freePort();
   const token = 'api-flow-token';
@@ -202,6 +215,8 @@ async function main() {
     });
     assert.strictEqual(arm.status, 200);
     assert.strictEqual(arm.json.ok, true);
+    assert.ok(arm.json.armId);
+    assert.ok(arm.json.turnNonce);
     assert.ok(arm.json.armNonce);
 
     const otherLeaderMode = await fetchJson(`${base}/api/mode`, {
@@ -215,25 +230,43 @@ async function main() {
     const promptOnlyNonce = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ conversationId, clientId, prompt: `${branch} task ${arm.json.armNonce}` }),
+      body: JSON.stringify({ conversationId, clientId, prompt: `${branch} task ${arm.json.turnNonce}` }),
     });
     assert.strictEqual(promptOnlyNonce.status, 200);
     assert.strictEqual(promptOnlyNonce.json.status, 'blocked');
-    assert.strictEqual(promptOnlyNonce.json.rule, 'missing_or_stale_arm_nonce');
+    assert.strictEqual(promptOnlyNonce.json.rule, 'arm_id_mismatch');
+
+    const missingTurnNonce = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: dispatchBody(conversationId, clientId, arm.json, `${branch} task`, { turnNonce: undefined }),
+    });
+    assert.strictEqual(missingTurnNonce.status, 200);
+    assert.strictEqual(missingTurnNonce.json.status, 'blocked');
+    assert.strictEqual(missingTurnNonce.json.rule, 'missing_turn_nonce');
+
+    const wrongArmId = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: dispatchBody(conversationId, clientId, arm.json, `${branch} task`, { armId: 'arm_wrong' }),
+    });
+    assert.strictEqual(wrongArmId.status, 200);
+    assert.strictEqual(wrongArmId.json.status, 'blocked');
+    assert.strictEqual(wrongArmId.json.rule, 'arm_id_mismatch');
 
     const staleNonce = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ conversationId, clientId, prompt: `${branch} task`, armNonce: 'old-nonce' }),
+      body: dispatchBody(conversationId, clientId, arm.json, `${branch} task`, { turnNonce: 'old-nonce' }),
     });
     assert.strictEqual(staleNonce.status, 200);
     assert.strictEqual(staleNonce.json.status, 'blocked');
-    assert.strictEqual(staleNonce.json.rule, 'missing_or_stale_arm_nonce');
+    assert.strictEqual(staleNonce.json.rule, 'turn_nonce_mismatch');
 
     const ambiguous = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ conversationId, clientId, prompt: 'Execute V8.4 path metric repair', armNonce: arm.json.armNonce }),
+      body: dispatchBody(conversationId, clientId, arm.json, 'Execute V8.4 path metric repair'),
     });
     assert.strictEqual(ambiguous.status, 200);
     assert.strictEqual(ambiguous.json.status, 'blocked');
@@ -245,17 +278,14 @@ async function main() {
       body: JSON.stringify({ conversationId, clientId, action: 'arm_once' }),
     });
     assert.strictEqual(rearm.status, 200);
+    assert.ok(rearm.json.armId);
+    assert.ok(rearm.json.turnNonce);
     assert.ok(rearm.json.armNonce);
 
     const accepted = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        conversationId,
-        clientId,
-        prompt: `Execute ${branch} read-only smoke task`,
-        armNonce: rearm.json.armNonce,
-      }),
+      body: dispatchBody(conversationId, clientId, rearm.json, `Execute ${branch} read-only smoke task`),
     });
     assert.strictEqual(accepted.status, 200);
     assert.strictEqual(accepted.json.status, 'accepted');
@@ -281,12 +311,7 @@ async function main() {
     const pendingDispatch = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        conversationId,
-        clientId,
-        prompt: `Execute ${branch} while previous result is pending`,
-        armNonce: pendingArm.json.armNonce,
-      }),
+      body: dispatchBody(conversationId, clientId, pendingArm.json, `Execute ${branch} while previous result is pending`),
     });
     assert.strictEqual(pendingDispatch.status, 200);
     assert.strictEqual(pendingDispatch.json.status, 'pending_result_exists');
@@ -314,6 +339,46 @@ async function main() {
     assert.strictEqual(afterAck.status, 200);
     assert.strictEqual(afterAck.json.hasResult, false);
 
+    const loopArm = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, clientId, action: 'arm_loop', maxDispatches: 2 }),
+    });
+    assert.strictEqual(loopArm.status, 200);
+    assert.ok(loopArm.json.armId);
+    assert.ok(loopArm.json.turnNonce);
+    const firstLoopTurnNonce = loopArm.json.turnNonce;
+    const loopAccepted = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: dispatchBody(conversationId, clientId, loopArm.json, `Execute ${branch} loop rotation smoke task`),
+    });
+    assert.strictEqual(loopAccepted.status, 200);
+    assert.strictEqual(loopAccepted.json.status, 'accepted');
+    assert.ok(loopAccepted.json.turnNonce, 'arm_loop should rotate to the next turn token');
+    assert.notStrictEqual(loopAccepted.json.turnNonce, firstLoopTurnNonce);
+    const loopResult = await waitForResult(base, token, conversationId);
+    assert.strictEqual(loopResult.ok, true);
+    const loopAck = await fetchJson(`${base}/api/result/ack`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, clientId, jobId: loopResult.jobId, resultId: loopResult.resultId }),
+    });
+    assert.strictEqual(loopAck.status, 200);
+    assert.strictEqual(loopAck.json.ok, true);
+    assert.strictEqual(loopAck.json.conversationMode, 'review');
+    const replayOldTurn = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: dispatchBody(conversationId, clientId, {
+        armId: loopArm.json.armId,
+        turnNonce: firstLoopTurnNonce,
+      }, `Execute ${branch} loop rotation smoke task again`),
+    });
+    assert.strictEqual(replayOldTurn.status, 200);
+    assert.strictEqual(replayOldTurn.json.status, 'blocked');
+    assert.strictEqual(replayOldTurn.json.rule, 'nonce_replay_blocked');
+
     const duplicateArm = await fetchJson(`${base}/api/mode`, {
       method: 'POST',
       headers,
@@ -323,12 +388,7 @@ async function main() {
     const duplicateDispatch = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        conversationId,
-        clientId,
-        prompt: `Execute ${branch} read-only smoke task`,
-        armNonce: duplicateArm.json.armNonce,
-      }),
+      body: dispatchBody(conversationId, clientId, duplicateArm.json, `Execute ${branch} read-only smoke task`),
     });
     assert.strictEqual(duplicateDispatch.status, 200);
     assert.strictEqual(duplicateDispatch.json.status, 'duplicate');
@@ -342,12 +402,7 @@ async function main() {
     const failedDispatch = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        conversationId,
-        clientId,
-        prompt: `Execute ${branch} FAIL_TASK`,
-        armNonce: failArm.json.armNonce,
-      }),
+      body: dispatchBody(conversationId, clientId, failArm.json, `Execute ${branch} FAIL_TASK`),
     });
     assert.strictEqual(failedDispatch.status, 200);
     assert.strictEqual(failedDispatch.json.status, 'accepted');
@@ -370,12 +425,7 @@ async function main() {
     const retryFailedDispatch = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        conversationId,
-        clientId,
-        prompt: `Execute ${branch} FAIL_TASK`,
-        armNonce: retryArm.json.armNonce,
-      }),
+      body: dispatchBody(conversationId, clientId, retryArm.json, `Execute ${branch} FAIL_TASK`),
     });
     assert.strictEqual(retryFailedDispatch.status, 200);
     assert.strictEqual(retryFailedDispatch.json.status, 'accepted');
@@ -388,6 +438,27 @@ async function main() {
     });
     assert.strictEqual(retryFailedAck.status, 200);
     assert.strictEqual(retryFailedAck.json.ok, true);
+
+    await wait(200);
+    const auditPath = path.join(repo, 'logs', conversationId + '.jsonl');
+    const auditText = fs.existsSync(auditPath) ? fs.readFileSync(auditPath, 'utf8') : '';
+    for (const rawToken of [
+      arm.json.armId,
+      arm.json.turnNonce,
+      arm.json.armNonce,
+      rearm.json.armId,
+      rearm.json.turnNonce,
+      loopArm.json.armId,
+      loopArm.json.turnNonce,
+      firstLoopTurnNonce,
+      failArm.json.armId,
+      failArm.json.turnNonce,
+      retryArm.json.armId,
+      retryArm.json.turnNonce,
+    ]) {
+      if (rawToken) assert(!auditText.includes(rawToken), 'audit log must not contain raw arm ids or turn tokens');
+    }
+    assert(auditText.includes('"redacted":true'), 'audit should retain redacted token metadata');
 
     console.log('api flow smoke test passed');
   } finally {

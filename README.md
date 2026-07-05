@@ -46,7 +46,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.15` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.16` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -56,17 +56,17 @@ Version `v0.3.15` makes the first run easier to understand and keeps the browser
 - Run Capsule project / branch / run / mode shown in the extension panel;
 - default Chat Mode, so normal Q&A is not interpreted as automation;
 - explicit Arm one run / Arm loop buttons;
-- per-arm nonce checks so old `codex` blocks cannot be resurrected accidentally;
+- visible non-secret turn tokens so old `codex` blocks cannot be resurrected accidentally;
 - Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief;
 - the extension panel can generate Run Capsule `inbox` briefing files and copy the GPT thread brief;
 - the panel now includes a four-step start guide and a **Use starter text** button for safer first tasks;
 - Run Capsule runtime path segments preserve Unicode project / branch / run names while still replacing unsafe path characters;
 - the extension now uses adaptive polling: faster checks while a run is active, slower checks while idle, and a DOM-change nudge when ChatGPT posts a new message;
-- macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back, AegisLoop stays armed and waits for a fresh nonce `codex` block instead of falling back to Chat Mode;
+- macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back, AegisLoop stays armed and waits for a fresh turn-token `codex` block instead of falling back to Chat Mode;
 - bridge requests now time out cleanly instead of leaving the panel stuck in a forever-ticking state;
 - switching between ChatGPT conversation URLs resets transient route state and baselines the new thread before automation resumes;
 - unacknowledged Codex results block new dispatches, so a pending result cannot be overwritten;
-- successful results become hard duplicates only after ACK; failed results can be retried with a fresh arm nonce;
+- successful results become hard duplicates only after ACK; failed results can be retried with a fresh turn token;
 - Codex timeout cleanup kills the process tree and stdout/stderr are bounded with ring buffers;
 - debug mode shows selector health for composer, send/stop controls, and latest message signatures;
 - `/api/*` calls now reject unexpected browser origins while still allowing ChatGPT pages, Chrome extension requests, and no-origin localhost CLI checks;
@@ -74,14 +74,15 @@ Version `v0.3.15` makes the first run easier to understand and keeps the browser
 - each ChatGPT tab gets a local `clientId`, and the bridge gives one active tab a short leader lease per conversation so duplicate tabs cannot both arm, dispatch, ACK, or NACK the same route;
 - Codex results now carry a stable `resultId`, making result ACK idempotent and preventing page refreshes from inserting the same result twice;
 - ChatGPT submit confirmation uses a unique `aegisloop_msg_id` line instead of weak text-prefix matching;
-- API request bodies are capped, dispatch nonce checks require the exact `armNonce` field, audit logs redact raw prompts/results by default, and corrupt `state.json` files can recover from `.bak` instead of silently resetting.
+- API request bodies are capped, dispatch checks require structured `armId` + `turnNonce` fields, audit logs redact raw prompts/results by default, and corrupt `state.json` files can recover from `.bak` instead of silently resetting.
 - result delivery now uses a three-step local ledger (`delivery_attempted`, `dom_confirmed`, `ack_sent`) so a page refresh or delayed DOM confirmation does not blindly insert the same result again;
 - the panel shows whether the current tab is the active leader, displays the local client id and lease countdown, and disables execution controls in duplicate tabs;
 - control writes now check bridge responses before mutating local UI state, surfacing `leader_conflict`, `auth_required`, `origin_not_allowed`, `bridge_timeout`, and `pending_result_exists` instead of silently drifting;
 - no-login real-browser recovery fixtures cover slow result recovery, duplicate suppression, leader conflicts, auth failures, and bridge timeout classification.
 - no-codex recovery now waits for the assistant text to stop streaming and stay stable before sending a protocol repair nudge;
 - the panel can export a sanitized Debug Snapshot with version, route hash, leader state, selector health, local state, and error metadata;
-- CI includes a deterministic real-loop replay fixture and a state-machine test for dispatch, ACK/NACK, pending result, leader, nonce, and protocol-fix invariants.
+- each arm creates an `armId` and per-turn `turnNonce`; turn tokens are single-use, rotate after accepted loop dispatches, and are logged only as hashes;
+- CI includes a deterministic real-loop replay fixture and a state-machine test for dispatch, ACK/NACK, pending result, leader, turn token, and protocol-fix invariants.
 
 `/health` stays public for local checks. Bridge APIs under `/api/*` are fail-closed unless you configure `apiToken`, or explicitly set `AEGISLOOP_ALLOW_NO_TOKEN=1` for a throwaway local test.
 
@@ -210,7 +211,7 @@ If the page already contains a valid `codex` block, click:
 Arm one run
 ```
 
-If there is no usable fresh `codex` block yet, type the first task in the AegisLoop panel and click **Arm one run** or **Arm loop**. AegisLoop will inject the current arm nonce into the protocol prompt.
+If there is no usable fresh `codex` block yet, type the first task in the AegisLoop panel and click **Arm one run** or **Arm loop**. AegisLoop will inject the current `armId` and visible turn token into the protocol prompt.
 
 ## The Protocol
 
@@ -218,7 +219,7 @@ ChatGPT must end each actionable reply with exactly one fenced `codex` block:
 
 ````markdown
 ```codex
-{"aegisloop":true,"arm_nonce":"aegis-YYYYMMDD-xxxx","prompt":"Read the current project state, make the smallest safe change, run checks, and report back."}
+{"aegisloop":true,"arm_id":"arm_xxx","turn_nonce":"aegis-YYYYMMDD-xxxx","arm_nonce":"aegis-YYYYMMDD-xxxx","prompt":"Read the current project state, make the smallest safe change, run checks, and report back."}
 ```
 ````
 
@@ -239,6 +240,8 @@ AegisLoop does not trust web content to decide local authority.
 Every bridge endpoint under `/api/*` should be protected by `X-AegisLoop-Token`. This prevents arbitrary local web pages from reading bindings or dispatching work through the bridge. Keep the token private and do not commit it. If `apiToken` is empty, AegisLoop rejects `/api/*` by default unless `AEGISLOOP_ALLOW_NO_TOKEN=1` is set for a local throwaway test.
 
 `/api/*` also checks the request `Origin`. ChatGPT pages, the Chrome extension background page, and no-origin local CLI checks are allowed by default. Other browser origins are rejected with `origin_not_allowed`.
+
+The `turn_nonce` / legacy `arm_nonce` value is visible in the ChatGPT page and is not a password, API token, or authentication secret. It is only a freshness marker that prevents stale `codex` blocks from old chat history being replayed. Real local authority comes from the bridge API token, Origin check, one-tab leader lease, explicit Armed Mode, exact structured `armId` + `turnNonce` body fields, pending-result lock, capsule/workspace gates, and local policy checks.
 
 The bridge can block payloads that appear to request:
 
@@ -329,6 +332,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.13 release notes: [docs/release-notes-v0.3.13.md](docs/release-notes-v0.3.13.md)
 - v0.3.14 release notes: [docs/release-notes-v0.3.14.md](docs/release-notes-v0.3.14.md)
 - v0.3.15 release notes: [docs/release-notes-v0.3.15.md](docs/release-notes-v0.3.15.md)
+- v0.3.16 release notes: [docs/release-notes-v0.3.16.md](docs/release-notes-v0.3.16.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
@@ -339,28 +343,29 @@ These files are local runtime state and are ignored by git:
 
 ## 中文说明
 
-**AegisLoop** 是一个把 ChatGPT 网页对话和本地 Codex session 连接起来的本地优先自动化桥。ChatGPT 负责规划，本地 Codex 负责执行；AegisLoop 在中间加上安全闸门、运行胶囊、审计日志和显式授权。
+**AegisLoop** 是一个本地优先的 ChatGPT-to-Codex 自动化桥。ChatGPT 负责规划下一步，本地 Codex 负责读取文件、执行任务和回传结果；AegisLoop 在中间提供显式授权、运行胶囊、审计日志、结果 ACK/NACK 和本地安全闸门。
 
 典型流程：
 
 ```text
 ChatGPT 规划下一步
   -> AegisLoop 转发给本地 Codex
-  -> Codex 本地执行并回报
+  -> Codex 在本地执行并回报
   -> AegisLoop 把结果贴回 ChatGPT
   -> ChatGPT 决定下一步或停止
 ```
 
 关键设计：
 
-- **默认 Chat Mode**：普通问答不会触发执行。
-- **显式 Arm**：只有点击 Arm one run / Arm loop 后才执行。
+- **默认 Chat Mode**：普通问答不会触发本地执行。
+- **显式 Arm**：只有点击 Arm one run / Arm loop 后才允许执行。
 - **Run Capsule**：每条执行线绑定 project、branch、run 和 external write root，减少支线串线。
-- **Dual Briefing**：GPT 只拿短规划简报，Codex 在本地读取完整执行简报。
-- **本地安全闸门**：越界 payload 会先被 bridge 拦截。
+- **Dual Briefing**：GPT 拿短规划简报，Codex 在本地读取完整执行简报。
+- **Turn token**：`turn_nonce` 是可见、非 secret 的新鲜度标记，只用于防旧 `codex` block 复活，不是认证 token。
+- **本地安全闸门**：真正的授权边界来自 apiToken、Origin gate、leader lease、pending result lock、capsule/workspace gate 和 policy gate。
 - **ACK/NACK 结果确认**：结果只有成功贴回 ChatGPT 后才标记为已消费。
 
-如果你同时跑多个项目或多个研究分支，推荐使用：
+如果同时跑多个项目或多个研究分支，推荐使用：
 
 ```text
 Discussion Thread = 正常问答，只讨论不执行

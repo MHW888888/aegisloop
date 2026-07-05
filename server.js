@@ -141,7 +141,10 @@ function defaultConversation(binding) {
     conversationMode: binding.conversationMode || 'chat',
     loopState: binding.conversationMode === 'frozen' ? 'halted' : 'paused',
     pauseReason: binding.conversationMode === 'frozen' ? 'frozen' : 'chat_mode',
-    armNonce: null,
+    armId: null,
+    turnNonce: null,
+    armNonce: null, // Legacy alias for the current visible turn token.
+    usedTurnTokens: [],
     armExpiresAt: 0,
     armMaxDispatches: 0,
     armDispatches: 0,
@@ -179,6 +182,7 @@ function ensureHashBuckets(conversation) {
   if (!Array.isArray(conversation.attemptedHashes)) conversation.attemptedHashes = [];
   if (!Array.isArray(conversation.failedHashes)) conversation.failedHashes = [];
   if (!Array.isArray(conversation.ackedResultIds)) conversation.ackedResultIds = [];
+  if (!Array.isArray(conversation.usedTurnTokens)) conversation.usedTurnTokens = [];
   if (!Array.isArray(conversation.ackedHashes)) {
     conversation.ackedHashes = Array.isArray(conversation.executedHashes)
       ? [...conversation.executedHashes]
@@ -284,7 +288,11 @@ function loadState() {
         existing.pauseReason = 'chat_mode';
       }
     }
-    if (!Object.prototype.hasOwnProperty.call(existing, 'armNonce')) existing.armNonce = null;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'armId')) existing.armId = existing.armNonce ? newArmId() : null;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'turnNonce')) existing.turnNonce = existing.armNonce || null;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'armNonce')) existing.armNonce = existing.turnNonce || null;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'usedTurnTokens')) existing.usedTurnTokens = [];
+    if (existing.turnNonce && !existing.armNonce) existing.armNonce = existing.turnNonce;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armExpiresAt')) existing.armExpiresAt = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armMaxDispatches')) existing.armMaxDispatches = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armDispatches')) existing.armDispatches = 0;
@@ -332,6 +340,7 @@ function sanitizeAudit(value, key) {
   if (!CONFIG.debugAuditRaw && ['prompt', 'finalMessage'].includes(key)) {
     return summarizeRawText(value);
   }
+  if (/^(armId|armNonce|turnNonce)$/i.test(String(key || ''))) return tokenMeta(value);
   if (typeof value === 'string') return redactString(value);
   if (Array.isArray(value)) return value.map(item => sanitizeAudit(item, key));
   if (value && typeof value === 'object') {
@@ -397,16 +406,72 @@ function hashPayload(prompt) {
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 }
 
-function newArmNonce() {
+function newArmId() {
+  return `arm_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function newTurnNonce() {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   return `aegis-${date}-${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function tokenHash(value) {
+  return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 16);
+}
+
+function tokenMeta(value) {
+  const raw = String(value || '');
+  return {
+    redacted: true,
+    hash: tokenHash(raw),
+    length: raw.length,
+  };
+}
+
+function currentArmPayload(conversation) {
+  return {
+    armId: conversation.armId || null,
+    turnNonce: conversation.turnNonce || null,
+    armNonce: conversation.turnNonce || conversation.armNonce || null,
+    armExpiresAt: conversation.armExpiresAt || 0,
+    armDispatches: conversation.armDispatches || 0,
+    armMaxDispatches: conversation.armMaxDispatches || 0,
+  };
+}
+
+function clearArm(conversation) {
+  conversation.armId = null;
+  conversation.turnNonce = null;
+  conversation.armNonce = null;
+  conversation.usedTurnTokens = [];
+  conversation.armExpiresAt = 0;
+  conversation.armMaxDispatches = 0;
+  conversation.armDispatches = 0;
+}
+
+function rotateTurnNonce(conversation) {
+  const next = newTurnNonce();
+  conversation.turnNonce = next;
+  conversation.armNonce = next;
+  return next;
+}
+
+function markTurnNonceUsed(conversation, turnNonce) {
+  rememberHash(conversation, 'usedTurnTokens', tokenHash(turnNonce), 1000);
+}
+
+function isTurnNonceUsed(conversation, turnNonce) {
+  const h = tokenHash(turnNonce);
+  return Array.isArray(conversation.usedTurnTokens) && conversation.usedTurnTokens.includes(h);
 }
 
 function armConversation(conversation, maxDispatches) {
   conversation.conversationMode = 'armed';
   conversation.loopState = 'running';
   conversation.pauseReason = null;
-  conversation.armNonce = newArmNonce();
+  conversation.armId = newArmId();
+  rotateTurnNonce(conversation);
+  conversation.usedTurnTokens = [];
   conversation.armExpiresAt = Date.now() + DEFAULT_ARM_TTL_MS;
   conversation.armMaxDispatches = maxDispatches;
   conversation.armDispatches = 0;
@@ -414,21 +479,19 @@ function armConversation(conversation, maxDispatches) {
   saveState();
   audit(conversation.conversationId, {
     type: 'mode_arm',
-    armNonce: conversation.armNonce,
+    armId: conversation.armId,
+    turnNonce: conversation.turnNonce,
     armExpiresAt: conversation.armExpiresAt,
     armMaxDispatches: conversation.armMaxDispatches,
   });
-  return conversation.armNonce;
+  return currentArmPayload(conversation);
 }
 
 function setChatMode(conversation, reason) {
   conversation.conversationMode = 'chat';
   conversation.loopState = 'paused';
   conversation.pauseReason = reason || 'chat_mode';
-  conversation.armNonce = null;
-  conversation.armExpiresAt = 0;
-  conversation.armMaxDispatches = 0;
-  conversation.armDispatches = 0;
+  clearArm(conversation);
   conversation.updatedAt = Date.now();
   saveState();
   audit(conversation.conversationId, { type: 'mode_chat', reason: conversation.pauseReason });
@@ -438,10 +501,7 @@ function setFrozenMode(conversation) {
   conversation.conversationMode = 'frozen';
   conversation.loopState = 'halted';
   conversation.pauseReason = 'frozen';
-  conversation.armNonce = null;
-  conversation.armExpiresAt = 0;
-  conversation.armMaxDispatches = 0;
-  conversation.armDispatches = 0;
+  clearArm(conversation);
   conversation.updatedAt = Date.now();
   saveState();
   audit(conversation.conversationId, { type: 'mode_frozen' });
@@ -876,8 +936,9 @@ function extractFinal(stdout) {
   return trimmed.length > max ? '...(truncated)\n' + trimmed.slice(-max) : trimmed;
 }
 
-function prepareDispatch(conversation, prompt, armNonce) {
+function prepareDispatch(conversation, prompt, auth) {
   ensureHashBuckets(conversation);
+  const dispatchAuth = auth || {};
   if (!['armed', 'review'].includes(conversation.conversationMode)) {
     audit(conversation.conversationId, {
       type: 'mode_blocked',
@@ -890,24 +951,75 @@ function prepareDispatch(conversation, prompt, armNonce) {
       conversationMode: conversation.conversationMode || 'chat',
     };
   }
-  if (!conversation.armNonce || Date.now() > conversation.armExpiresAt) {
-    setChatMode(conversation, 'arm_expired');
+  if (!conversation.armId || !conversation.turnNonce || Date.now() > conversation.armExpiresAt) {
+    setChatMode(conversation, 'turn_nonce_expired');
     return {
       status: 'blocked',
-      rule: 'arm_expired',
+      rule: 'turn_nonce_expired',
       conversationMode: conversation.conversationMode,
     };
   }
-  const providedNonce = String(armNonce || '');
-  if (providedNonce !== conversation.armNonce) {
+  const providedArmId = String(dispatchAuth.armId || '');
+  if (providedArmId !== conversation.armId) {
     audit(conversation.conversationId, {
       type: 'mode_blocked',
-      rule: 'missing_or_stale_arm_nonce',
+      rule: 'arm_id_mismatch',
       conversationMode: conversation.conversationMode,
     });
     return {
       status: 'blocked',
-      rule: 'missing_or_stale_arm_nonce',
+      rule: 'arm_id_mismatch',
+      conversationMode: conversation.conversationMode,
+    };
+  }
+  const providedTurnNonce = String(dispatchAuth.turnNonce || '');
+  if (!providedTurnNonce) {
+    audit(conversation.conversationId, {
+      type: 'mode_blocked',
+      rule: 'missing_turn_nonce',
+      conversationMode: conversation.conversationMode,
+    });
+    return {
+      status: 'blocked',
+      rule: 'missing_turn_nonce',
+      conversationMode: conversation.conversationMode,
+    };
+  }
+  if (isTurnNonceUsed(conversation, providedTurnNonce)) {
+    audit(conversation.conversationId, {
+      type: 'mode_blocked',
+      rule: 'nonce_replay_blocked',
+      turnNonce: providedTurnNonce,
+      conversationMode: conversation.conversationMode,
+    });
+    return {
+      status: 'blocked',
+      rule: 'nonce_replay_blocked',
+      conversationMode: conversation.conversationMode,
+    };
+  }
+  if (providedTurnNonce !== conversation.turnNonce) {
+    audit(conversation.conversationId, {
+      type: 'mode_blocked',
+      rule: 'turn_nonce_mismatch',
+      turnNonce: providedTurnNonce,
+      conversationMode: conversation.conversationMode,
+    });
+    return {
+      status: 'blocked',
+      rule: 'turn_nonce_mismatch',
+      conversationMode: conversation.conversationMode,
+    };
+  }
+  if (!dispatchAuth.assistantMessageSig || !dispatchAuth.codeBlockHash) {
+    audit(conversation.conversationId, {
+      type: 'mode_blocked',
+      rule: 'dispatch_metadata_missing',
+      conversationMode: conversation.conversationMode,
+    });
+    return {
+      status: 'blocked',
+      rule: 'dispatch_metadata_missing',
       conversationMode: conversation.conversationMode,
     };
   }
@@ -982,12 +1094,26 @@ function prepareDispatch(conversation, prompt, armNonce) {
   }
 
   rememberHash(conversation, 'attemptedHashes', hash);
+  const usedTurnTokenHash = tokenHash(providedTurnNonce);
+  markTurnNonceUsed(conversation, providedTurnNonce);
   conversation.activeDispatchHash = hash;
   conversation.armDispatches = (conversation.armDispatches || 0) + 1;
+  if (remainingDispatches(conversation) > 0 && Date.now() <= conversation.armExpiresAt) {
+    rotateTurnNonce(conversation);
+  } else {
+    conversation.turnNonce = null;
+    conversation.armNonce = null;
+  }
   conversation.conversationMode = 'running';
   saveState();
   ensureCapsuleRuntime(conversation);
-  return { status: 'accepted', hash, prompt: effectivePrompt };
+  return {
+    status: 'accepted',
+    hash,
+    prompt: effectivePrompt,
+    usedTurnTokenHash,
+    ...currentArmPayload(conversation),
+  };
 }
 
 async function runDispatchAsync(conversation, prompt, hash) {
@@ -1239,10 +1365,7 @@ const server = http.createServer(async (request, response) => {
           workspaceDir: c.workspaceDir,
           fullAuto: c.fullAuto,
           conversationMode: c.conversationMode || 'chat',
-          armNonce: c.armNonce || null,
-          armExpiresAt: c.armExpiresAt || 0,
-          armDispatches: c.armDispatches || 0,
-          armMaxDispatches: c.armMaxDispatches || 0,
+          ...currentArmPayload(c),
           loopState: c.loopState,
           pauseReason: c.pauseReason,
           turn: c.turn,
@@ -1288,10 +1411,7 @@ const server = http.createServer(async (request, response) => {
         capsule: conversation.capsule || null,
         fullAuto: conversation.fullAuto,
         conversationMode: conversation.conversationMode || 'chat',
-        armNonce: conversation.armNonce || null,
-        armExpiresAt: conversation.armExpiresAt || 0,
-        armDispatches: conversation.armDispatches || 0,
-        armMaxDispatches: conversation.armMaxDispatches || 0,
+        ...currentArmPayload(conversation),
         loopState: conversation.loopState,
         contractVersion: CONFIG.contractVersion,
         briefing: getBriefingStatus(conversation),
@@ -1310,7 +1430,12 @@ const server = http.createServer(async (request, response) => {
         return sendJson(response, 400, { error: 'prompt required' });
       }
 
-      const prepared = prepareDispatch(conversation, body.prompt, body.armNonce);
+      const prepared = prepareDispatch(conversation, body.prompt, {
+        armId: body.armId,
+        turnNonce: body.turnNonce,
+        assistantMessageSig: body.assistantMessageSig,
+        codeBlockHash: body.codeBlockHash,
+      });
       if (prepared.status === 'accepted') {
         runDispatchAsync(conversation, prepared.prompt, prepared.hash);
       }
@@ -1331,6 +1456,7 @@ const server = http.createServer(async (request, response) => {
           conversationMode: conversation.conversationMode,
           loopState: conversation.loopState,
           pauseReason: conversation.pauseReason,
+          ...currentArmPayload(conversation),
         });
       }
 
@@ -1341,6 +1467,7 @@ const server = http.createServer(async (request, response) => {
           conversationMode: conversation.conversationMode,
           loopState: conversation.loopState,
           pauseReason: conversation.pauseReason,
+          ...currentArmPayload(conversation),
         });
       }
 
@@ -1348,15 +1475,12 @@ const server = http.createServer(async (request, response) => {
         const maxDispatches = body.action === 'arm_once'
           ? 1
           : Math.max(1, Number(body.maxDispatches || DEFAULT_ARM_LOOP_MAX_DISPATCHES));
-        const nonce = armConversation(conversation, maxDispatches);
+        const arm = armConversation(conversation, maxDispatches);
         return sendJson(response, 200, {
           ok: true,
           conversationMode: conversation.conversationMode,
           loopState: conversation.loopState,
-          armNonce: nonce,
-          armExpiresAt: conversation.armExpiresAt,
-          armDispatches: conversation.armDispatches,
-          armMaxDispatches: conversation.armMaxDispatches,
+          ...arm,
         });
       }
 
@@ -1461,7 +1585,7 @@ const server = http.createServer(async (request, response) => {
       }
       rememberHash(conversation, 'ackedResultIds', pendingResultId, 1000);
       conversation.pendingResult.consumed = true;
-      if (remainingDispatches(conversation) > 0 && conversation.armNonce && Date.now() <= conversation.armExpiresAt) {
+      if (remainingDispatches(conversation) > 0 && conversation.turnNonce && Date.now() <= conversation.armExpiresAt) {
         conversation.conversationMode = 'review';
         conversation.loopState = 'running';
         conversation.pauseReason = null;
@@ -1469,10 +1593,7 @@ const server = http.createServer(async (request, response) => {
         conversation.conversationMode = 'chat';
         conversation.loopState = 'paused';
         conversation.pauseReason = 'chat_mode';
-        conversation.armNonce = null;
-        conversation.armExpiresAt = 0;
-        conversation.armMaxDispatches = 0;
-        conversation.armDispatches = 0;
+        clearArm(conversation);
       }
       conversation.updatedAt = Date.now();
       saveState();
@@ -1484,7 +1605,14 @@ const server = http.createServer(async (request, response) => {
         resultOk: !!ackedResult.ok,
         conversationMode: conversation.conversationMode,
       });
-      return sendJson(response, 200, { ok: true, hasPendingResult: false });
+      return sendJson(response, 200, {
+        ok: true,
+        hasPendingResult: false,
+        conversationMode: conversation.conversationMode,
+        loopState: conversation.loopState,
+        pauseReason: conversation.pauseReason,
+        ...currentArmPayload(conversation),
+      });
     }
 
     if (url.pathname === '/api/result/nack' && request.method === 'POST') {

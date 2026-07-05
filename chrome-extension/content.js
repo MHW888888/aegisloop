@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.15';
+  const CONTENT_VERSION = '0.3.16';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -84,18 +84,20 @@
   // Contract text (teaches GPT how to end each turn)
   // ----------------------------------------------------------------------------
   function contractText() {
-    const nonce = LE.armNonce || 'ARM_NONCE_FROM_PANEL';
+    const armId = LE.armId || 'ARM_ID_FROM_PANEL';
+    const turnNonce = LE.turnNonce || LE.armNonce || 'TURN_TOKEN_FROM_PANEL';
     return [
       '',
       `[AegisLoop protocol ${CONTRACT_VERSION}]`,
       'Evaluate the Codex result above, then give the next step.',
       'AegisLoop is NOT a built-in ChatGPT tool. Do not try to call a tool.',
+      'The turn token is visible and non-secret. It only proves freshness for this armed turn.',
       'If you are in a Pro or reasoning mode, do not answer with a tool-availability disclaimer.',
       'To use local Codex, write the next instruction as plain JSON inside a fenced ```codex block.',
       'Your reply MUST end with exactly one of these:',
-      '1) one fenced ```codex block with JSON containing the current arm_nonce and the next instruction. Example:',
+      '1) one fenced ```codex block with JSON containing the current arm_id, turn_nonce, and the next instruction. Example:',
       '```codex',
-      `{"aegisloop":true,"arm_nonce":"${nonce}","prompt":"Next task. Keep research_only=true and approved_for_scoring=false."}`,
+      `{"aegisloop":true,"arm_id":"${armId}","turn_nonce":"${turnNonce}","arm_nonce":"${turnNonce}","prompt":"Next task. Keep research_only=true and approved_for_scoring=false."}`,
       '```',
       '2) if this loop should stop, output exactly one line:',
       '<<<LOOP_STOP>>>',
@@ -108,11 +110,13 @@
   // Sent automatically when GPT replied but gave no usable codex block, to nudge
   // it back onto the protocol. Bounded by MAX_REFORMAT so it never spams.
   function reformatMsg() {
+    const armId = LE.armId || 'ARM_ID_FROM_PANEL';
+    const turnNonce = LE.turnNonce || LE.armNonce || 'TURN_TOKEN_FROM_PANEL';
     return [
       '[AegisLoop] Your last reply had no usable fenced codex block.',
       'AegisLoop is not a built-in ChatGPT tool. Do not call or search for tools.',
       'Do not answer that the tool is unavailable; AegisLoop reads visible page text after you reply.',
-      'Reply with ONLY one JSON fenced codex block containing arm_nonce="' + (LE.armNonce || 'ARM_NONCE_FROM_PANEL') + '" and the next instruction,',
+      'Reply with ONLY one JSON fenced codex block containing arm_id="' + armId + '", turn_nonce="' + turnNonce + '", and the next instruction,',
       'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
     ].join('\n');
   }
@@ -146,6 +150,8 @@
     apiToken: null,
     authRequired: false,
     conversationMode: 'chat',
+    armId: null,
+    turnNonce: null,
     armNonce: null,
     armExpiresAt: 0,
     armDispatches: 0,
@@ -206,6 +212,8 @@
     LE.codexSessionId = null;
     LE.workspaceDir = null;
     LE.conversationMode = 'chat';
+    LE.armId = null;
+    LE.turnNonce = null;
     LE.armNonce = null;
     LE.armExpiresAt = 0;
     LE.armDispatches = 0;
@@ -230,6 +238,16 @@
     LE.lastSubmitMsgId = null;
     LE.lastLeaderHeartbeatAt = 0;
     log('conversation route changed; transient state reset', id);
+  }
+
+  function syncArmState(json) {
+    if (!json) return;
+    LE.armId = json.armId || null;
+    LE.turnNonce = json.turnNonce || json.armNonce || null;
+    LE.armNonce = json.armNonce || json.turnNonce || null;
+    LE.armExpiresAt = json.armExpiresAt || 0;
+    LE.armDispatches = json.armDispatches || 0;
+    LE.armMaxDispatches = json.armMaxDispatches || 0;
   }
 
   // ----------------------------------------------------------------------------
@@ -282,6 +300,15 @@
     return json.error || json.status || r.error || fallback || ('http_' + (r.status || 'error'));
   }
 
+  const TURN_TOKEN_ERRORS = new Set([
+    'nonce_replay_blocked',
+    'arm_id_mismatch',
+    'missing_turn_nonce',
+    'turn_nonce_mismatch',
+    'turn_nonce_expired',
+    'dispatch_metadata_missing',
+  ]);
+
   function isWriteOk(r) {
     return !!(r && r.ok && r.status >= 200 && r.status < 300 && !(r.json && r.json.error));
   }
@@ -302,6 +329,20 @@
     const r = await bridge(pathAndQuery, 'POST', payload);
     if (isWriteOk(r)) {
       LE.lastControlError = null;
+      if (r.json && Object.prototype.hasOwnProperty.call(r.json, 'conversationMode')) {
+        LE.conversationMode = r.json.conversationMode || LE.conversationMode;
+      }
+      if (r.json && Object.prototype.hasOwnProperty.call(r.json, 'loopState')) {
+        LE.loopState = r.json.loopState || LE.loopState;
+      }
+      if (r.json && Object.prototype.hasOwnProperty.call(r.json, 'pauseReason')) {
+        LE.pauseReason = r.json.pauseReason || null;
+      }
+      if (r.json && (
+        Object.prototype.hasOwnProperty.call(r.json, 'armId')
+        || Object.prototype.hasOwnProperty.call(r.json, 'turnNonce')
+        || Object.prototype.hasOwnProperty.call(r.json, 'armNonce')
+      )) syncArmState(r.json);
       return r;
     }
     surfaceWriteFailure(r, pathAndQuery);
@@ -355,10 +396,7 @@
       LE.capsule = r.json.capsule || null;
       LE.briefing = r.json.briefing || null;
       LE.conversationMode = r.json.conversationMode || 'chat';
-      LE.armNonce = r.json.armNonce || null;
-      LE.armExpiresAt = r.json.armExpiresAt || 0;
-      LE.armDispatches = r.json.armDispatches || 0;
-      LE.armMaxDispatches = r.json.armMaxDispatches || 0;
+      syncArmState(r.json);
       LE.bridgeOk = true;
       LE.authRequired = false;
       LE.leaderLease = r.json.leaderLease || null;
@@ -520,6 +558,12 @@
     const full = `${a.role || 'assistant'}\0${a.text || ''}\0${blocks}`;
     return `${a.count}|${full.length}|${djb2(full)}`;
   }
+  function codeBlockHashOf(a) {
+    if (!a) return null;
+    const blocks = Array.isArray(a.codeBlocks) ? a.codeBlocks.join('\0') : '';
+    const full = `${a.text || ''}\0${blocks}`;
+    return String(djb2(full));
+  }
   function djb2(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h >>> 0; }
 
   function selectorHealth() {
@@ -565,6 +609,8 @@
       latestAssistantSignature: sigOf(assistant),
       latestUserSignature: sigOf(user),
       pendingResultIdHash: shortHash(LE.resultDeliveryUnconfirmed),
+      armIdHash: shortHash(LE.armId),
+      turnNonceHash: shortHash(LE.turnNonce || LE.armNonce),
       armNonceHash: shortHash(LE.armNonce),
       lastSubmitMsgId: LE.lastSubmitMsgId ? shortId(LE.lastSubmitMsgId) : null,
       seedSubmitUnconfirmed: !!LE.seedSubmitUnconfirmed,
@@ -591,17 +637,21 @@
 
   function parsePromptPayload(inner) {
     let prompt = String(inner || '').trim();
+    let armId = null;
+    let turnNonce = null;
     let armNonce = null;
     if (!prompt) return null;
     try {
       const j = JSON.parse(prompt);
       if (j && typeof j.prompt === 'string') {
         prompt = j.prompt;
+        armId = j.arm_id || j.armId || null;
+        turnNonce = j.turn_nonce || j.turnNonce || j.arm_nonce || j.armNonce || null;
         armNonce = j.arm_nonce || j.armNonce || null;
       }
     } catch (e) { /* treat as plain-text prompt */ }
     prompt = String(prompt).trim();
-    return prompt ? { prompt, armNonce } : null;
+    return prompt ? { prompt, armId, turnNonce, armNonce } : null;
   }
 
   // ----------------------------------------------------------------------------
@@ -661,7 +711,10 @@
   function canDispatchParsed(parsed) {
     if (!parsed || !parsed.prompt) return false;
     if (!['armed', 'review'].includes(LE.conversationMode)) return false;
-    return !!LE.armNonce && parsed.armNonce === LE.armNonce;
+    const currentTurnNonce = LE.turnNonce || LE.armNonce;
+    return !!LE.armId && !!currentTurnNonce
+      && parsed.armId === LE.armId
+      && parsed.turnNonce === currentTurnNonce;
   }
 
   // ----------------------------------------------------------------------------
@@ -843,10 +896,7 @@
       LE.capsule = me.capsule || null;
       LE.briefing = me.briefing || null;
       LE.conversationMode = me.conversationMode || 'chat';
-      LE.armNonce = me.armNonce || null;
-      LE.armExpiresAt = me.armExpiresAt || 0;
-      LE.armDispatches = me.armDispatches || 0;
-      LE.armMaxDispatches = me.armMaxDispatches || 0;
+      syncArmState(me);
       LE.leaderLease = me.leaderLease || LE.leaderLease;
       LE.leaderIsCurrent = !!(LE.leaderLease && LE.leaderLease.clientId === LE.clientId);
 
@@ -880,6 +930,10 @@
               resultId,
             });
             if (ack) {
+              syncArmState(ack.json);
+              LE.conversationMode = ack.json.conversationMode || LE.conversationMode;
+              LE.loopState = ack.json.loopState || LE.loopState;
+              LE.pauseReason = ack.json.pauseReason || null;
               await markResultAckSent(resultId);
               LE.local = 'awaiting_assistant';
               LE.resultDeliveryUnconfirmed = null;
@@ -919,6 +973,10 @@
               resultId,
             });
             if (ack) {
+              syncArmState(ack.json);
+              LE.conversationMode = ack.json.conversationMode || LE.conversationMode;
+              LE.loopState = ack.json.loopState || LE.loopState;
+              LE.pauseReason = ack.json.pauseReason || null;
               if (resultId) await markResultAckSent(resultId);
               LE.local = 'awaiting_assistant';
               LE.resultDeliveryUnconfirmed = null;
@@ -979,7 +1037,10 @@
           conversationId: LE.conversationId,
           clientId: LE.clientId,
           prompt: parsed.prompt,
-          armNonce: parsed.armNonce,
+          armId: parsed.armId,
+          turnNonce: parsed.turnNonce,
+          assistantMessageSig: sig,
+          codeBlockHash: codeBlockHashOf(a),
         });
         if (!(d.ok && d.status === 200)) {
           surfaceWriteFailure(d, 'dispatch_failed');
@@ -989,6 +1050,7 @@
         LE.seedSubmitUnconfirmed = false;
         resetProtocolRecovery();
         if (d.ok && d.json.status === 'accepted') {
+          syncArmState(d.json);
           LE.local = 'dispatching';
           log('dispatched to codex, waiting result');
         } else if (d.ok && d.json.status === 'busy') {
@@ -1001,6 +1063,8 @@
             log('duplicate payload -> paused for human');
           }
         } else if (d.ok && (d.json.status === 'blocked' || d.json.status === 'not_running')) {
+          LE.lastControlError = d.json.rule || d.json.status || 'dispatch_blocked';
+          if (TURN_TOKEN_ERRORS.has(LE.lastControlError)) LE.seedSubmitUnconfirmed = false;
           log('dispatch blocked/not_running:', d.json);
         } else if (d.ok && d.json.status === 'pending_result_exists') {
           LE.local = 'dispatching';
@@ -1230,10 +1294,7 @@
       LE.seedSubmitUnconfirmed = false;
       LE.conversationMode = mode.json.conversationMode || 'armed';
       LE.loopState = mode.json.loopState || 'running';
-      LE.armNonce = mode.json.armNonce || null;
-      LE.armExpiresAt = mode.json.armExpiresAt || 0;
-      LE.armDispatches = mode.json.armDispatches || 0;
-      LE.armMaxDispatches = mode.json.armMaxDispatches || 0;
+      syncArmState(mode.json);
       LE.lastSig = sigOf(latestAssistant());
       const seed = seedBox.value.trim();
       if (seed) {
@@ -1246,7 +1307,7 @@
             seedBox.value = '';
             LE.local = 'awaiting_assistant';
             LE.seedSubmitUnconfirmed = false;
-            log('seed submit not confirmed by user bubble, but fresh nonce codex block seen');
+            log('seed submit not confirmed by user bubble, but fresh turn-token codex block seen');
             scheduleTick(DOM_NUDGE_MS);
           } else {
             LE.local = 'awaiting_assistant';
@@ -1366,14 +1427,14 @@
     if (LE.bound && !leaderOk) pill($('#le-simple'), 'le-bad', 'Not leader: close the duplicate tab or wait for the lease to expire.');
     else if (LE.resultDeliveryUnconfirmed) pill($('#le-simple'), 'le-warn', 'Result delivery is unconfirmed; check the last user bubble before retrying.');
     else if (LE.needsProtocolFix || LE.pauseReason === 'needs_user_protocol_fix') pill($('#le-simple'), 'le-warn', 'Protocol fix needed: ask GPT for one visible codex JSON block.');
-    else if (LE.seedSubmitUnconfirmed && activeMode()) pill($('#le-simple'), 'le-warn', 'Seed unconfirmed: still armed, waiting for fresh nonce block.');
+    else if (LE.seedSubmitUnconfirmed && activeMode()) pill($('#le-simple'), 'le-warn', 'Seed unconfirmed: still armed, waiting for fresh turn-token block.');
     else if (LE.conversationMode === 'chat') pill($('#le-simple'), 'le-ok', 'Chat mode: automation is off.');
     else if (LE.conversationMode === 'frozen') pill($('#le-simple'), 'le-bad', 'Frozen: this thread cannot execute.');
     else if (LE.local === 'dispatching') pill($('#le-simple'), 'le-run', 'Codex is running. Wait for result.');
     else if (LE.local === 'inserting') pill($('#le-simple'), 'le-run', 'Sending Codex result to GPT.');
-    else if (ready) pill($('#le-simple'), 'le-ok', 'Armed: fresh nonce block is ready.');
-    else if (LE.conversationMode === 'armed') pill($('#le-simple'), 'le-warn', 'Armed: waiting for a fresh nonce block.');
-    else if (LE.conversationMode === 'review') pill($('#le-simple'), 'le-warn', 'Review: waiting for GPT next step with nonce.');
+    else if (ready) pill($('#le-simple'), 'le-ok', 'Armed: fresh turn-token block is ready.');
+    else if (LE.conversationMode === 'armed') pill($('#le-simple'), 'le-warn', 'Armed: waiting for a fresh turn-token block.');
+    else if (LE.conversationMode === 'review') pill($('#le-simple'), 'le-warn', 'Review: waiting for GPT next step with the turn token.');
     else pill($('#le-simple'), 'le-warn', 'Idle.');
     LE.selectorHealth = selectorHealth();
     const h = LE.selectorHealth;
