@@ -197,9 +197,7 @@ Do not call a ChatGPT tool. AegisLoop is watching this page for a fenced codex J
 ## 中文速记
 
 AegisLoop 不是 ChatGPT 内置工具。
-
-模型不需要“调用工具”，只需要在页面上输出一个 fenced `codex` JSON block。
-
+模型不需要调用工具，只需要在页面上输出一个 fenced `codex` JSON block。
 如果 5.3 / 5.5 Pro 说“找不到工具”，不要继续解释工具权限，直接让它输出：
 
 ```text

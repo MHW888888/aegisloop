@@ -113,6 +113,10 @@ function checkProjectFiles() {
   try {
     const manifest = readJson(EXTENSION_MANIFEST_PATH);
     mark('ok', 'chrome-extension/manifest.json', `valid JSON; version ${manifest.version || 'unknown'}`);
+    const hosts = manifest.host_permissions || [];
+    if (hosts.includes('http://127.0.0.1/*') || hosts.includes('http://localhost/*')) {
+      mark('warn', 'extension localhost permissions', 'extension can contact localhost on any port; keep apiToken enabled for normal use');
+    }
   } catch (error) {
     mark('fail', 'chrome-extension/manifest.json', error.message);
   }

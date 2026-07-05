@@ -55,6 +55,8 @@ If an API response says `payload_too_large`, the request body exceeded the local
 
 If an API response says `leader_conflict`, the same ChatGPT conversation is probably open in another tab. AegisLoop only allows one active tab to arm, dispatch, ACK, or NACK a conversation at a time. Close the duplicate tab or wait about 15 seconds for the old leader lease to expire.
 
+The extension panel shows the current tab leader status, local client id, and lease countdown. If it says **not leader**, execution controls are disabled on that tab by design.
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.
@@ -143,6 +145,19 @@ Modern AegisLoop builds attach a `resultId` to each Codex result and remember wh
 3. check debug logs for `leader_conflict`, `resultId mismatch`, or `already_acked`.
 
 Repeated ACK is safe; repeated insertion usually means an old extension build or two tabs were active at the same time.
+
+## result_delivery_unconfirmed
+
+This means AegisLoop attempted to send the Codex result back to ChatGPT, but the page DOM did not confirm the user bubble. To avoid duplicate result insertion, AegisLoop pauses instead of sending the same result again.
+
+Before retrying:
+
+1. check the last few ChatGPT user bubbles for an `aegisloop_result_id` line;
+2. confirm the panel is the current tab leader;
+3. keep the same ChatGPT conversation URL if the result is already visible;
+4. include the panel version, leader state, and reason in any bug report.
+
+Do not reconnect the Codex session unless the ChatGPT conversation URL changed or the local binding is actually wrong.
 
 ## Needs approval
 

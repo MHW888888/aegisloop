@@ -97,7 +97,7 @@ AegisLoop 目前按这个顺序做浏览器兼容测试最稳：
 
 1. **Chrome**：主目标，优先保证稳定。
 2. **Edge**：最值得马上补测，路径和 Chrome 很接近。
-3. **Brave / 其他 Chromium 浏览器**：可以试，但要记录隐私盾牌、localhost、ChatGPT 注入是否影响插件。
+3. **Brave / 其他 Chromium 浏览器**：可以测试，但要记录隐私盾牌、localhost、ChatGPT 注入是否影响插件。
 4. **Firefox**：不要直接承诺支持，需要单独 WebExtensions 适配和测试。
 5. **Tor Browser / 洋葱浏览器**：不建议作为常规使用目标。Tor 官方不鼓励安装额外扩展，因为可能削弱隐私和指纹保护。
 

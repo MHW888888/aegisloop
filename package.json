@@ -1,6 +1,6 @@
 {
   "name": "aegisloop",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "private": false,
   "description": "A simpler guarded bridge where ChatGPT plans and local Codex executes safely.",
   "main": "server.js",
@@ -8,13 +8,14 @@
   "scripts": {
     "start": "node server.js",
     "start:bridge": "node server.js",
-    "check": "node --check server.js && node --check config-validation.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-api-flow.js && node --check scripts/test-chatgpt-dom-fixture.js && node --check scripts/test-config-validation.js && node --check scripts/test-extension-compat.js && node --check scripts/test-text-integrity.js && node --check scripts/test-unicode-runtime.js && node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-extension-compat.js && node scripts/test-chatgpt-dom-fixture.js && node scripts/test-text-integrity.js && node scripts/test-api-flow.js && node scripts/test-unicode-runtime.js",
+    "check": "node --check server.js && node --check config-validation.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-api-flow.js && node --check scripts/test-chatgpt-dom-fixture.js && node --check scripts/test-config-validation.js && node --check scripts/test-extension-compat.js && node --check scripts/test-real-browser-recovery-fixture.js && node --check scripts/test-text-integrity.js && node --check scripts/test-unicode-runtime.js && node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-extension-compat.js && node scripts/test-chatgpt-dom-fixture.js && node scripts/test-real-browser-recovery-fixture.js && node scripts/test-text-integrity.js && node scripts/test-api-flow.js && node scripts/test-unicode-runtime.js",
     "doctor": "node scripts/doctor.js",
     "setup:mac": "sh scripts/setup-macos.sh",
     "test:config": "node scripts/test-config-validation.js",
     "test:briefing": "node scripts/test-briefing-materializer.js",
     "test:api": "node scripts/test-api-flow.js",
     "test:extension": "node scripts/test-extension-compat.js",
+    "test:e2e:fixture": "node scripts/test-real-browser-recovery-fixture.js",
     "test:browser:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-browser-launch.ps1",
     "test:chatgpt-model-ui": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-chatgpt-model-ui.ps1",
     "test:text": "node scripts/test-text-integrity.js",

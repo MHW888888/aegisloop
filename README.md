@@ -36,7 +36,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.13` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.14` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -65,6 +65,10 @@ Version `v0.3.13` makes the first run easier to understand and keeps the browser
 - Codex results now carry a stable `resultId`, making result ACK idempotent and preventing page refreshes from inserting the same result twice;
 - ChatGPT submit confirmation uses a unique `aegisloop_msg_id` line instead of weak text-prefix matching;
 - API request bodies are capped, dispatch nonce checks require the exact `armNonce` field, audit logs redact raw prompts/results by default, and corrupt `state.json` files can recover from `.bak` instead of silently resetting.
+- result delivery now uses a three-step local ledger (`delivery_attempted`, `dom_confirmed`, `ack_sent`) so a page refresh or delayed DOM confirmation does not blindly insert the same result again;
+- the panel shows whether the current tab is the active leader, displays the local client id and lease countdown, and disables execution controls in duplicate tabs;
+- control writes now check bridge responses before mutating local UI state, surfacing `leader_conflict`, `auth_required`, `origin_not_allowed`, `bridge_timeout`, and `pending_result_exists` instead of silently drifting;
+- no-login real-browser recovery fixtures cover slow result recovery, duplicate suppression, leader conflicts, auth failures, and bridge timeout classification.
 
 `/health` stays public for local checks. Bridge APIs under `/api/*` are fail-closed unless you configure `apiToken`, or explicitly set `AEGISLOOP_ALLOW_NO_TOKEN=1` for a throwaway local test.
 
@@ -242,7 +246,9 @@ Codex results use an explicit ACK flow:
 - `POST /api/result/ack` marks it consumed only after the extension confirms ChatGPT received the result. ACK includes `resultId`, so repeated ACKs are safe.
 - `POST /api/result/nack` keeps it pending and pauses the loop when insertion fails.
 
-The active browser tab also uses a short leader lease. If the same ChatGPT conversation is open in two tabs, only the current leader can arm, dispatch, ACK, or NACK. Close the duplicate tab or wait for the lease to expire if you see `leader_conflict`.
+The active browser tab also uses a short leader lease. If the same ChatGPT conversation is open in two tabs, only the current leader can arm, dispatch, ACK, or NACK. Close the duplicate tab or wait for the lease to expire if you see `leader_conflict`; the extension panel shows the current leader state and lease countdown.
+
+If a result delivery was attempted but the ChatGPT DOM did not confirm the user bubble, AegisLoop scans recent user messages for the same `resultId` before taking action. If it still cannot confirm delivery, it pauses with `result_delivery_unconfirmed` instead of blindly inserting the result again.
 
 You can intentionally auto-approve selected low-risk gate rules:
 
@@ -308,6 +314,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.11 release notes: [docs/release-notes-v0.3.11.md](docs/release-notes-v0.3.11.md)
 - v0.3.12 release notes: [docs/release-notes-v0.3.12.md](docs/release-notes-v0.3.12.md)
 - v0.3.13 release notes: [docs/release-notes-v0.3.13.md](docs/release-notes-v0.3.13.md)
+- v0.3.14 release notes: [docs/release-notes-v0.3.14.md](docs/release-notes-v0.3.14.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)

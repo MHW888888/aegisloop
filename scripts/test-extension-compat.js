@@ -19,6 +19,7 @@ const manifest = readJson('chrome-extension/manifest.json');
 const content = read('chrome-extension/content.js');
 const background = read('chrome-extension/background.js');
 const server = read('server.js');
+const doctor = read('scripts/doctor.js');
 
 assert.strictEqual(manifest.manifest_version, 3, 'extension must stay MV3');
 assert.strictEqual(manifest.version, pkg.version, 'manifest version must match package.json');
@@ -82,8 +83,21 @@ assert.match(content, /aegisloop_msg_id/, 'submit confirmation must use a unique
 assert.doesNotMatch(content, /containsMarker/, 'submit confirmation must not rely on weak prefix matching');
 assert.match(content, /wasResultInserted/, 'content must remember inserted result ids');
 assert.match(content, /markResultInserted/, 'content must mark result ids before acking');
-assert.match(content, /resultId: result\.resultId/, 'result ACK/NACK must include resultId');
+assert.match(content, /resultId,/, 'result ACK/NACK must include resultId');
 assert.match(content, /codeBlocks\.join\('\\0'\)/, 'assistant signature must include rendered code blocks');
+assert.match(content, /resultDelivery:/, 'content must keep a three-step result delivery ledger');
+assert.match(content, /delivery_attempted/, 'result ledger must record delivery attempts');
+assert.match(content, /dom_confirmed/, 'result ledger must record DOM confirmation');
+assert.match(content, /ack_sent/, 'result ledger must record ACK completion');
+assert.match(content, /aegisloop_result_id/, 'result messages must include visible result ids');
+assert.match(content, /result_delivery_unconfirmed/, 'unconfirmed delivery must pause instead of blindly reinserting');
+assert.match(content, /postControl/, 'content must check bridge control writes');
+assert.match(content, /surfaceWriteFailure/, 'content must surface failed control writes');
+assert.match(content, /Tab leader/, 'panel must show leader state');
+assert.match(content, /Client \/ lease/, 'panel must show client id and lease countdown');
+assert.match(content, /button:disabled/, 'non-leader control buttons must be visibly disabled');
+assert.match(content, /Not leader: close the duplicate tab/, 'panel must explain duplicate-tab leader conflicts');
+assert.match(content, /looksLikeToolUnavailable/, 'content must classify tool-unavailable model replies');
 
 assert.match(server, /pending_result_exists/, 'server must block new dispatches while a result is pending');
 assert.match(server, /ackedHashes/, 'server must separate acked hashes from attempts');
@@ -105,5 +119,8 @@ assert.match(server, /STATE_BAK_PATH/, 'server must keep a state backup');
 assert.match(server, /STATE_PATH \+ '\.bad\.'/, 'server must quarantine corrupt state files');
 assert.match(server, /providedNonce !== conversation\.armNonce/, 'dispatch nonce must match body armNonce exactly');
 assert.doesNotMatch(server, /prompt\)\.includes\(conversation\.armNonce\)/, 'dispatch must not accept nonce only because it appears in prompt text');
+
+assert.match(doctor, /extension localhost permissions/, 'doctor must warn about broad localhost extension permissions');
+assert.match(doctor, /keep apiToken enabled/, 'doctor must recommend apiToken when localhost permissions are broad');
 
 console.log('extension compatibility checks passed');

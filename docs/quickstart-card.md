@@ -13,9 +13,7 @@ It is best for bounded engineering loops, not casual chat.
 中文速记：
 
 ```text
-ChatGPT 负责规划。
-本地 Codex 负责执行。
-AegisLoop 负责连接、暂停、回传和安全闸门。
+ChatGPT 负责规划，本地 Codex 负责执行，AegisLoop 负责连接、暂停、回传和安全闸门。
 ```
 
 ## Before You Start
@@ -45,9 +43,7 @@ You should see JSON.
 中文速记：
 
 ```text
-先 npm run doctor。
-再 npm start。
-再打开 /health 看 bridge 是否在线。
+先 npm run doctor，再 npm start，再打开 /health 看 bridge 是否在线。
 ```
 
 ## Recommended ChatGPT Thread Setup
@@ -65,9 +61,7 @@ Do not mix normal Q&A and automation in the same runner thread.
 中文速记：
 
 ```text
-普通聊天另开一条。
-执行任务单独开 runner thread。
-用完或跑偏就 Freeze。
+普通聊天另开一条。执行任务单独开 runner thread。用完或跑偏就 Freeze。
 ```
 
 ## First Message To GPT
@@ -96,11 +90,7 @@ Then click **Use starter text** and **Arm one run** in the extension panel.
 中文速记：
 
 ```text
-第一句话告诉 GPT：
-这是执行线程，不是普通问答。
-当前项目是什么。
-当前目标是什么。
-只能给下一步 Codex 任务。
+第一句话告诉 GPT：这是执行线程，不是普通问答；当前项目是什么；当前目标是什么；只能给下一步 Codex 任务。
 ```
 
 ## First Codex Task
@@ -120,8 +110,7 @@ For a first safe run, ask Codex to read only:
 中文速记：
 
 ```text
-第一次不要让它直接改文件。
-先只读、总结、列下一步。
+第一次不要让它直接改文件。先只读、总结、列下一步。
 ```
 
 ## Good First Tasks
@@ -160,9 +149,7 @@ Avoid:
 中文速记：
 
 ```text
-新手优先：Chat Mode -> Use starter text -> Arm one run。
-熟了以后再用 Arm loop。
-任务结束点 Freeze。
+新手优先：Chat Mode -> Use starter text -> Arm one run。熟了以后再用 Arm loop。任务结束点 Freeze。
 ```
 
 ## Browser Notes
@@ -189,5 +176,5 @@ Common fixes:
 - refresh the ChatGPT tab after reloading the extension;
 - confirm the bridge URL is `http://127.0.0.1:<port>`;
 - use a fresh runner thread instead of a long mixed chat;
-- prefer **Arm one run** over **Arm loop** while debugging.
+- prefer **Arm one run** over **Arm loop** while debugging;
 - if a model says it cannot find the tool, read [model-compatibility.md](model-compatibility.md).

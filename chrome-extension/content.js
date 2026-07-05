@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.13';
+  const CONTENT_VERSION = '0.3.14';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -36,6 +36,8 @@
   const SEED_FRESH_CODEX_CONFIRM_MS = 15000;
   const CONTENT_BRIDGE_TIMEOUT_MS = 10000;
   const NO_CODEX_GRACE_MS = 5000;
+  const TOOL_UNAVAILABLE_REPAIR_MS = 1200;
+  const RESULT_DELIVERY_HOLD_MS = 10 * 60 * 1000;
   const LEADER_HEARTBEAT_MS = 5000;
 
   // ----------------------------------------------------------------------------
@@ -125,6 +127,10 @@
     ].join('\n');
   }
 
+  function looksLikeToolUnavailable(text) {
+    return /(tool|tools).{0,40}(unavailable|not available|cannot be used|can't be used)|cannot access.{0,40}(tool|tools)|no built-?in tool|(\u65e0\u6cd5|\u6ca1\u6709).{0,20}\u5de5\u5177/i.test(String(text || ''));
+  }
+
   // ----------------------------------------------------------------------------
   // State
   // ----------------------------------------------------------------------------
@@ -158,8 +164,11 @@
     missingCodexFirstSeenAt: 0,
     needsProtocolFix: false,
     seedSubmitUnconfirmed: false,
+    resultDeliveryUnconfirmed: null,
     selectorHealth: null,
     leaderLease: null,
+    leaderIsCurrent: false,
+    lastControlError: null,
     lastLeaderHeartbeatAt: 0,
     debug: false,
     ticking: false,
@@ -208,9 +217,12 @@
     LE.prevAssistantText = '';
     resetProtocolRecovery();
     LE.seedSubmitUnconfirmed = false;
+    LE.resultDeliveryUnconfirmed = null;
     LE.userHold = false;
     LE.selectorHealth = null;
     LE.leaderLease = null;
+    LE.leaderIsCurrent = false;
+    LE.lastControlError = null;
     LE.lastLeaderHeartbeatAt = 0;
     log('conversation route changed; transient state reset', id);
   }
@@ -255,6 +267,55 @@
     });
   }
 
+  function bridgeProblem(r, fallback) {
+    if (!r) return fallback || 'bridge_error';
+    const json = r.json || {};
+    if (r.status === 401) return 'auth_required';
+    if (r.status === 403) return 'origin_not_allowed';
+    if (r.status === 504 || r.error === 'bridge_timeout' || json.error === 'bridge_timeout') return 'bridge_timeout';
+    if (r.status === 409) return json.error || json.status || 'leader_conflict';
+    return json.error || json.status || r.error || fallback || ('http_' + (r.status || 'error'));
+  }
+
+  function isWriteOk(r) {
+    return !!(r && r.ok && r.status >= 200 && r.status < 300 && !(r.json && r.json.error));
+  }
+
+  function surfaceWriteFailure(r, fallback) {
+    const reason = bridgeProblem(r, fallback);
+    LE.lastControlError = reason;
+    if (reason === 'auth_required') LE.authRequired = true;
+    if (reason === 'bridge_timeout') LE.bridgeError = 'bridge_timeout';
+    if (reason === 'leader_conflict') LE.leaderIsCurrent = false;
+    log('bridge write failed', reason, r && r.json ? r.json : r);
+    renderPanel();
+    return reason;
+  }
+
+  async function postControl(pathAndQuery, body) {
+    const payload = { ...(body || {}), clientId: LE.clientId };
+    const r = await bridge(pathAndQuery, 'POST', payload);
+    if (isWriteOk(r)) {
+      LE.lastControlError = null;
+      return r;
+    }
+    surfaceWriteFailure(r, pathAndQuery);
+    return null;
+  }
+
+  function shortId(value) {
+    return value ? String(value).replace(/^tab-/, '').slice(0, 8) : '-';
+  }
+
+  function leaderLeaseMsLeft() {
+    const expiresAt = LE.leaderLease && Number(LE.leaderLease.expiresAt || 0);
+    return expiresAt ? Math.max(0, expiresAt - Date.now()) : 0;
+  }
+
+  function isCurrentLeader() {
+    return !!(LE.bound && LE.leaderIsCurrent && LE.leaderLease && LE.leaderLease.clientId === LE.clientId && leaderLeaseMsLeft() > 0);
+  }
+
   // ----------------------------------------------------------------------------
   // conversationId
   // ----------------------------------------------------------------------------
@@ -292,6 +353,9 @@
       LE.bridgeOk = true;
       LE.authRequired = false;
       LE.leaderLease = r.json.leaderLease || null;
+      LE.leaderIsCurrent = !!r.json.leader;
+      if (!LE.leaderIsCurrent) LE.lastControlError = 'leader_conflict';
+      else if (LE.lastControlError === 'leader_conflict') LE.lastControlError = null;
       LE.lastLeaderHeartbeatAt = Date.now();
       log('registered', id, '->', LE.codexSessionId, LE.workspaceDir);
     } else if (r.ok && r.status === 409) {
@@ -302,8 +366,10 @@
       LE.bound = false;
       LE.bridgeOk = true;
       LE.authRequired = true;
+      LE.leaderIsCurrent = false;
     } else {
       LE.bridgeOk = false;         // bridge not up
+      LE.leaderIsCurrent = false;
     }
   }
 
@@ -329,14 +395,52 @@
   function resultStorageKey(resultId) {
     return 'insertedResult:' + (LE.conversationId || 'none') + ':' + resultId;
   }
-  function wasResultInserted(resultId) {
-    if (!resultId) return Promise.resolve(false);
-    const key = resultStorageKey(resultId);
-    return new Promise(res => chrome.storage.local.get([key], o => res(!!o[key])));
+  function resultDeliveryKey(resultId) {
+    return 'resultDelivery:' + (LE.conversationId || 'none') + ':' + resultId;
   }
-  function markResultInserted(resultId) {
+  function resultIdLine(id) {
+    return `[aegisloop_result_id:${id}]`;
+  }
+  function loadResultDelivery(resultId) {
+    if (!resultId) return Promise.resolve({});
+    const keys = [resultStorageKey(resultId), resultDeliveryKey(resultId)];
+    return new Promise(res => chrome.storage.local.get(keys, o => {
+      const ledger = o[resultDeliveryKey(resultId)] || {};
+      if (o[resultStorageKey(resultId)] && !ledger.dom_confirmed) ledger.dom_confirmed = true;
+      res(ledger);
+    }));
+  }
+  async function patchResultDelivery(resultId, patch) {
+    if (!resultId) return {};
+    const existing = await loadResultDelivery(resultId);
+    const next = { ...existing, ...patch, updatedAt: Date.now() };
+    return new Promise(res => chrome.storage.local.set({ [resultDeliveryKey(resultId)]: next }, () => res(next)));
+  }
+  async function wasResultInserted(resultId) {
+    const ledger = await loadResultDelivery(resultId);
+    return !!(ledger.dom_confirmed || ledger.ack_sent);
+  }
+  async function markResultInserted(resultId, patch) {
     if (!resultId) return Promise.resolve();
+    await patchResultDelivery(resultId, { ...(patch || {}), dom_confirmed: true, domConfirmedAt: Date.now() });
     return new Promise(res => chrome.storage.local.set({ [resultStorageKey(resultId)]: Date.now() }, res));
+  }
+  function markResultAckSent(resultId) {
+    if (!resultId) return Promise.resolve();
+    return patchResultDelivery(resultId, { ack_sent: true, ackSentAt: Date.now() });
+  }
+  function recentUserContains(text, limit) {
+    if (!text) return false;
+    const users = SEL.messages().filter(m => m.role === 'user').slice(-(limit || 8));
+    return users.some(m => String(m.text || '').includes(text));
+  }
+  function recentUserHasResult(resultId) {
+    return recentUserContains(resultIdLine(resultId), 8);
+  }
+  async function shouldHoldUnconfirmedDelivery(resultId) {
+    const ledger = await loadResultDelivery(resultId);
+    if (!ledger.delivery_attempted || ledger.dom_confirmed || ledger.ack_sent) return false;
+    return Date.now() - Number(ledger.attemptedAt || 0) < RESULT_DELIVERY_HOLD_MS;
   }
   function normalizeBridgeUrlForPanel(value) {
     const raw = String(value || DEFAULT_BRIDGE_URL).trim();
@@ -594,13 +698,20 @@
   // Send to GPT and CONFIRM by reading back a new matching user message.
   // We do NOT gate on "composer is empty" - ChatGPT clears its own composer on
   // a successful send; if a cosmetic draft remains we tidy it but never fail on it.
-  async function submitToGPT(text) {
+  async function submitToGPTDetailed(text, options) {
+    const resultId = options && options.resultId;
     const msgId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
     const marker = msgIdLine(msgId);
-    const outgoing = `${text}\n\n${marker}`;
+    const resultMarker = resultId ? resultIdLine(resultId) : null;
+    const markerLines = resultMarker ? `${marker}\n${resultMarker}` : marker;
+    const outgoing = `${text}\n\n${markerLines}`;
+    let attempted = false;
     for (let attempt = 0; attempt < 2; attempt++) {
       const before = userMsgCount();
-      if (!setComposerText(outgoing)) return false;
+      if (!setComposerText(outgoing)) {
+        return { ok: false, attempted, msgId, marker, resultMarker };
+      }
+      attempted = true;
       await sleep(150);
       clickSend();
       const t0 = Date.now();
@@ -609,10 +720,10 @@
         const users = SEL.messages().filter(m => m.role === 'user');
         if (users.length > before) {
           const lastUser = users[users.length - 1].text || '';
-          if (lastUser.includes(marker)) {
+          if (lastUser.includes(marker) || (resultMarker && lastUser.includes(resultMarker))) {
             if (composerText()) clearComposer();   // best-effort tidy, not required
             log('submit confirmed (aegisloop_msg_id seen)');
-            return true;
+            return { ok: true, attempted, msgId, marker, resultMarker };
           }
         }
       }
@@ -620,7 +731,12 @@
       clearComposer();
       await sleep(200);
     }
-    return false;   // honest failure -> caller pauses for human
+    return { ok: false, attempted, msgId, marker, resultMarker };   // honest failure -> caller pauses for human
+  }
+
+  async function submitToGPT(text) {
+    const result = await submitToGPTDetailed(text);
+    return !!result.ok;
   }
 
   // ----------------------------------------------------------------------------
@@ -685,6 +801,8 @@
       LE.armExpiresAt = me.armExpiresAt || 0;
       LE.armDispatches = me.armDispatches || 0;
       LE.armMaxDispatches = me.armMaxDispatches || 0;
+      LE.leaderLease = me.leaderLease || LE.leaderLease;
+      LE.leaderIsCurrent = !!(LE.leaderLease && LE.leaderLease.clientId === LE.clientId);
 
       if (LE.conversationMode === 'chat' || LE.conversationMode === 'frozen') {
         LE.local = 'idle';
@@ -706,42 +824,80 @@
         const rr = await bridge('/api/result?conversationId=' + encodeURIComponent(LE.conversationId), 'GET');
         if (rr.ok && rr.json.hasResult) {
           const result = rr.json.result;
+          const resultId = result.resultId || null;
           log('got codex result, inserting to GPT', result.jobId, 'ok=', result.ok);
-          if (result.resultId && await wasResultInserted(result.resultId)) {
-            await bridge('/api/result/ack', 'POST', {
+          if (resultId && (await wasResultInserted(resultId) || recentUserHasResult(resultId))) {
+            await markResultInserted(resultId, { recoveredFromDom: recentUserHasResult(resultId) });
+            const ack = await postControl('/api/result/ack', {
               conversationId: LE.conversationId,
-              clientId: LE.clientId,
               jobId: result.jobId,
-              resultId: result.resultId,
+              resultId,
             });
-            LE.local = 'awaiting_assistant';
-            resetProtocolRecovery();
+            if (ack) {
+              await markResultAckSent(resultId);
+              LE.local = 'awaiting_assistant';
+              LE.resultDeliveryUnconfirmed = null;
+              resetProtocolRecovery();
+            }
+            return;
+          }
+          if (resultId && await shouldHoldUnconfirmedDelivery(resultId)) {
+            LE.local = 'idle';
+            LE.resultDeliveryUnconfirmed = resultId;
+            await postControl('/api/result/nack', {
+              conversationId: LE.conversationId,
+              jobId: result.jobId,
+              resultId,
+              reason: 'result_delivery_unconfirmed',
+            });
             return;
           }
           LE.local = 'inserting';
           const payload = result.finalMessage + '\n' + contractText();
-          const sent = await submitToGPT(payload);
-          if (sent) {
-            if (result.resultId) await markResultInserted(result.resultId);
-            await bridge('/api/result/ack', 'POST', {
-              conversationId: LE.conversationId,
-              clientId: LE.clientId,
+          if (resultId) {
+            await patchResultDelivery(resultId, {
+              delivery_attempted: true,
+              attemptedAt: Date.now(),
               jobId: result.jobId,
-              resultId: result.resultId,
             });
-            LE.local = 'awaiting_assistant';
-            resetProtocolRecovery();
+          }
+          const sent = await submitToGPTDetailed(payload, { resultId });
+          if (sent.ok || (resultId && recentUserHasResult(resultId))) {
+            if (resultId) await markResultInserted(resultId, {
+              msgId: sent.msgId,
+              recoveredFromDom: !sent.ok,
+            });
+            const ack = await postControl('/api/result/ack', {
+              conversationId: LE.conversationId,
+              jobId: result.jobId,
+              resultId,
+            });
+            if (ack) {
+              if (resultId) await markResultAckSent(resultId);
+              LE.local = 'awaiting_assistant';
+              LE.resultDeliveryUnconfirmed = null;
+              resetProtocolRecovery();
+            }
           }
           else {
             LE.local = 'idle';
-            await bridge('/api/result/nack', 'POST', {
+            LE.resultDeliveryUnconfirmed = resultId;
+            if (resultId) {
+              await patchResultDelivery(resultId, {
+                delivery_attempted: true,
+                msgId: sent.msgId,
+                marker: sent.marker,
+                resultMarker: sent.resultMarker,
+                unconfirmedAt: Date.now(),
+              });
+            }
+            await postControl('/api/result/nack', {
               conversationId: LE.conversationId,
-              clientId: LE.clientId,
               jobId: result.jobId,
-              resultId: result.resultId,
-              reason: 'result_insert_failed',
+              resultId,
+              reason: sent.attempted ? 'result_delivery_unconfirmed' : 'result_insert_failed',
             });
-            log('insert failed -> paused for human');
+            log('insert unconfirmed -> paused for human');
           }
         }
         return;
@@ -762,11 +918,13 @@
       const parsed = extractCodex(a);
 
       if (parsed && parsed.stop) {
-        LE.lastSig = sig;
-        LE.seedSubmitUnconfirmed = false;
-        resetProtocolRecovery();
-        await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'chat', reason: 'loop_stop_requested' });
-        log('GPT requested LOOP_STOP -> chat mode');
+        const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action: 'chat', reason: 'loop_stop_requested' });
+        if (mode) {
+          LE.lastSig = sig;
+          LE.seedSubmitUnconfirmed = false;
+          resetProtocolRecovery();
+          log('GPT requested LOOP_STOP -> chat mode');
+        }
         return;
       }
 
@@ -777,6 +935,10 @@
           prompt: parsed.prompt,
           armNonce: parsed.armNonce,
         });
+        if (!(d.ok && d.status === 200)) {
+          surfaceWriteFailure(d, 'dispatch_failed');
+          return;
+        }
         LE.lastSig = sig;
         LE.seedSubmitUnconfirmed = false;
         resetProtocolRecovery();
@@ -787,11 +949,18 @@
           LE.local = 'dispatching';
           log('conversation already has an active dispatch, waiting result');
         } else if (d.ok && d.json.status === 'duplicate') {
-          LE.local = 'idle';
-          await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'chat', reason: 'duplicate_payload' });
-          log('duplicate payload -> paused for human');
+          const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action: 'chat', reason: 'duplicate_payload' });
+          if (mode) {
+            LE.local = 'idle';
+            log('duplicate payload -> paused for human');
+          }
         } else if (d.ok && (d.json.status === 'blocked' || d.json.status === 'not_running')) {
           log('dispatch blocked/not_running:', d.json);
+        } else if (d.ok && d.json.status === 'pending_result_exists') {
+          LE.local = 'dispatching';
+          log('dispatch refused because a pending result exists; polling result');
+        } else {
+          surfaceWriteFailure(d, d.json && d.json.status || 'dispatch_failed');
         }
         return;
       }
@@ -807,7 +976,8 @@
         log('no codex block yet -> grace window before protocol repair');
         return;
       }
-      if (Date.now() - LE.missingCodexFirstSeenAt < NO_CODEX_GRACE_MS) {
+      const graceMs = looksLikeToolUnavailable(a.text) ? TOOL_UNAVAILABLE_REPAIR_MS : NO_CODEX_GRACE_MS;
+      if (Date.now() - LE.missingCodexFirstSeenAt < graceMs) {
         LE.local = 'awaiting_assistant';
         return;
       }
@@ -818,16 +988,18 @@
         LE.lastSig = sig;
         if (sent) { LE.local = 'awaiting_assistant'; }
         else {
-          LE.local = 'idle';
           LE.needsProtocolFix = true;
-          await bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'pause', reason: 'reformat_submit_failed' });
+          const paused = await postControl('/api/control', { conversationId: LE.conversationId, action: 'pause', reason: 'reformat_submit_failed' });
+          if (paused) LE.local = 'idle';
         }
       } else {
         LE.lastSig = sig;
-        LE.local = 'idle';
         LE.needsProtocolFix = true;
-        await bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'pause', reason: 'needs_user_protocol_fix' });
-        log('no codex block and reformat budget spent -> protocol fix needed');
+        const paused = await postControl('/api/control', { conversationId: LE.conversationId, action: 'pause', reason: 'needs_user_protocol_fix' });
+        if (paused) {
+          LE.local = 'idle';
+          log('no codex block and reformat budget spent -> protocol fix needed');
+        }
       }
       return;
     } catch (e) {
@@ -859,6 +1031,8 @@
         #le-panel textarea{width:100%;height:54px;background:#0f1115;border:1px solid #2a2e37;color:#e6e6e6;border-radius:6px;padding:6px 7px;resize:vertical}
         #le-panel button{cursor:pointer;border:1px solid #2a2e37;background:#222632;color:#e6e6e6;border-radius:6px;padding:5px 8px;font:inherit}
         #le-panel button:hover{background:#2a2f3d}
+        #le-panel button:disabled{opacity:.45;cursor:not-allowed}
+        #le-panel button:disabled:hover{background:#222632}
         #le-panel button.danger{background:#3a1c1f;border-color:#5a2a2e;color:#ffb4b4}
         #le-panel button.go{background:#16331f;border-color:#2a5a36;color:#b6ffc8}
         #le-panel .muted{color:#8a93a3;font-size:11px}
@@ -881,6 +1055,8 @@
         <div class="row"><span class="k">ChatGPT tab</span><span id="le-conv" class="muted">-</span></div>
         <div class="row"><span class="k">Local Codex session</span><span id="le-sess" class="muted">-</span></div>
         <div class="row"><span class="k">Mode</span><span id="le-state" class="pill le-run">-</span></div>
+        <div class="row"><span class="k">Tab leader</span><span id="le-leader" class="pill le-warn">checking</span></div>
+        <div class="row"><span class="k">Client / lease</span><span id="le-client" class="muted">-</span></div>
         <div id="le-guide" class="capsule">
           <div class="row"><span class="k">Start here</span><span class="pill le-run">4 steps</span></div>
           <ol class="steps">
@@ -971,13 +1147,12 @@
     panel.querySelector('#le-brief-generate').onclick = async () => {
       const objective = panel.querySelector('#le-brief-objective').value.trim();
       if (!objective) return alert('Fill an objective for this briefing');
-      const r = await bridge('/api/briefing/materialize', 'POST', {
+      const r = await postControl('/api/briefing/materialize', {
         conversationId: LE.conversationId,
-        clientId: LE.clientId,
         objective,
       });
-      if (!(r.ok && r.status === 200 && r.json.ok)) {
-        return alert('Briefing generation failed: ' + ((r.json && (r.json.error || r.json.reason)) || r.error || r.status));
+      if (!(r && r.ok && r.status === 200 && r.json.ok)) {
+        return alert('Briefing generation failed: ' + ((r && r.json && (r.json.error || r.json.reason)) || (r && r.error) || (r && r.status) || LE.lastControlError || 'unknown'));
       }
       LE.briefing = r.json.briefing || null;
       renderPanel();
@@ -992,8 +1167,8 @@
     };
     async function armAndMaybeSeed(action) {
       const seedBox = panel.querySelector('#le-seed');
-      const mode = await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action });
-      if (!(mode.ok && mode.status === 200 && mode.json.ok)) return;
+      const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action });
+      if (!(mode && mode.json && mode.json.ok)) return;
       LE.userHold = false;
       LE.local = 'idle';
       resetProtocolRecovery();
@@ -1035,30 +1210,39 @@
       panel.querySelector('#le-seed').value = starterSeed();
     };
     panel.querySelector('#le-chat').onclick = async () => {
-      LE.local = 'idle';
-      LE.userHold = true;
-      LE.seedSubmitUnconfirmed = false;
-      LE.lastSig = sigOf(latestAssistant());
-      resetProtocolRecovery();
-      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'chat' });
+      const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action: 'chat' });
+      if (mode) {
+        LE.local = 'idle';
+        LE.userHold = true;
+        LE.seedSubmitUnconfirmed = false;
+        LE.lastSig = sigOf(latestAssistant());
+        resetProtocolRecovery();
+      }
       renderPanel();
     };
     panel.querySelector('#le-freeze').onclick = async () => {
-      LE.local = 'idle';
-      LE.userHold = true;
-      LE.seedSubmitUnconfirmed = false;
-      LE.lastSig = sigOf(latestAssistant());
-      resetProtocolRecovery();
-      await bridge('/api/mode', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'freeze' });
+      const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action: 'freeze' });
+      if (mode) {
+        LE.local = 'idle';
+        LE.userHold = true;
+        LE.seedSubmitUnconfirmed = false;
+        LE.lastSig = sigOf(latestAssistant());
+        resetProtocolRecovery();
+      }
       renderPanel();
     };
-    panel.querySelector('#le-approve').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'approve' }).then(() => { LE.local = 'dispatching'; });
-    panel.querySelector('#le-skip').onclick = () => bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'skip' });
+    panel.querySelector('#le-approve').onclick = async () => {
+      const r = await postControl('/api/control', { conversationId: LE.conversationId, action: 'approve' });
+      if (r) LE.local = 'dispatching';
+    };
+    panel.querySelector('#le-skip').onclick = async () => {
+      await postControl('/api/control', { conversationId: LE.conversationId, action: 'skip' });
+    };
     panel.querySelector('#le-stop').onclick = () => { panel.querySelector('#le-confirm').style.display = 'block'; };
     panel.querySelector('#le-stop-no').onclick = () => { panel.querySelector('#le-confirm').style.display = 'none'; };
     panel.querySelector('#le-stop-yes').onclick = async () => {
-      await bridge('/api/control', 'POST', { conversationId: LE.conversationId, clientId: LE.clientId, action: 'stop', confirmed: true });
-      panel.querySelector('#le-confirm').style.display = 'none';
+      const r = await postControl('/api/control', { conversationId: LE.conversationId, action: 'stop', confirmed: true });
+      if (r) panel.querySelector('#le-confirm').style.display = 'none';
     };
   }
 
@@ -1077,6 +1261,11 @@
       ? 'running - ' + LE.local
       : (LE.conversationMode || 'chat');
     pill($('#le-state'), modeMap[LE.conversationMode] || 'le-run', modeText);
+    const leaderOk = isCurrentLeader();
+    const leaseSeconds = Math.ceil(leaderLeaseMsLeft() / 1000);
+    if (!LE.bound) pill($('#le-leader'), 'le-warn', 'not connected');
+    else pill($('#le-leader'), leaderOk ? 'le-ok' : 'le-bad', leaderOk ? 'leader' : 'not leader');
+    $('#le-client').textContent = `${shortId(LE.clientId)} / ${leaseSeconds ? leaseSeconds + 's' : '-'}`;
     const cap = LE.capsule;
     if (cap && cap.enabled) {
       const rootOk = /\\runs\\|\/runs\//i.test(cap.allowedWriteRoot || '') || /AegisLoopRuntime/i.test(cap.allowedWriteRoot || '');
@@ -1102,15 +1291,21 @@
     if (brief.meta && brief.meta.objective && !$('#le-brief-objective').value) {
       $('#le-brief-objective').value = brief.meta.objective;
     }
-    $('#le-reason').textContent = LE.bridgeError
+    $('#le-reason').textContent = LE.lastControlError
+      ? ('control: ' + String(LE.lastControlError).slice(0, 120))
+      : LE.bridgeError
       ? ('bridge: ' + String(LE.bridgeError).slice(0, 120))
-      : (LE.seedSubmitUnconfirmed && activeMode()
+      : (LE.resultDeliveryUnconfirmed
+        ? ('Result delivery attempted but unconfirmed: ' + String(LE.resultDeliveryUnconfirmed).slice(0, 18))
+        : (LE.seedSubmitUnconfirmed && activeMode()
         ? 'Seed send was not confirmed; still armed and waiting until arm TTL.'
-        : (LE.pauseReason ? ('reason: ' + LE.pauseReason) : ''));
+        : (LE.pauseReason ? ('reason: ' + LE.pauseReason) : '')));
     $('#le-bindbox').style.display = (LE.conversationId && !LE.bound && LE.bridgeOk) ? 'block' : 'none';
     $('#le-blocked').style.display = LE.blockedPayload ? 'block' : 'none';
     if (LE.blockedPayload) $('#le-blocked-rule').textContent = 'rule: ' + LE.blockedPayload.rule + ' - ' + (LE.blockedPayload.prompt || '').slice(0, 80) + '...';
-    if (LE.needsProtocolFix || LE.pauseReason === 'needs_user_protocol_fix') pill($('#le-simple'), 'le-warn', 'Protocol fix needed: ask GPT for one visible codex JSON block.');
+    if (LE.bound && !leaderOk) pill($('#le-simple'), 'le-bad', 'Not leader: close the duplicate tab or wait for the lease to expire.');
+    else if (LE.resultDeliveryUnconfirmed) pill($('#le-simple'), 'le-warn', 'Result delivery is unconfirmed; check the last user bubble before retrying.');
+    else if (LE.needsProtocolFix || LE.pauseReason === 'needs_user_protocol_fix') pill($('#le-simple'), 'le-warn', 'Protocol fix needed: ask GPT for one visible codex JSON block.');
     else if (LE.seedSubmitUnconfirmed && activeMode()) pill($('#le-simple'), 'le-warn', 'Seed unconfirmed: still armed, waiting for fresh nonce block.');
     else if (LE.conversationMode === 'chat') pill($('#le-simple'), 'le-ok', 'Chat mode: automation is off.');
     else if (LE.conversationMode === 'frozen') pill($('#le-simple'), 'le-bad', 'Frozen: this thread cannot execute.');
@@ -1130,6 +1325,11 @@
     const showSeed = LE.local !== 'dispatching' && LE.local !== 'inserting';
     $('#le-seed-label').style.display = showSeed ? 'block' : 'none';
     $('#le-seed').style.display = showSeed ? 'block' : 'none';
+    const controlsDisabled = !LE.bound || !LE.bridgeOk || LE.authRequired || !!(LE.bound && !leaderOk);
+    ['#le-chat', '#le-send', '#le-arm-loop', '#le-freeze', '#le-approve', '#le-skip', '#le-stop', '#le-stop-yes'].forEach((selector) => {
+      const el = $(selector);
+      if (el) el.disabled = controlsDisabled;
+    });
   }
 
   // ----------------------------------------------------------------------------
