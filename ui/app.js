@@ -273,7 +273,8 @@ function loopPrompt(basePrompt, runId, index, maxRuns, previousResult) {
     '',
     'Work toward the user objective incrementally.',
     'Do one coherent step in this iteration.',
-    'If the objective is already complete or the next step requires human confirmation, begin your final response with <<<LOOP_STOP>>> and explain why.',
+    'Run this iteration even if earlier iterations made progress.',
+    'Only return exactly <<<LOOP_STOP>>> when continuing would be unsafe or impossible without human input.',
   ];
   if (previousResult) {
     lines.push(
@@ -373,7 +374,7 @@ async function runSequence(maxRuns) {
         log(`Loop paused after ${i} run${i === 1 ? '' : 's'}.`);
         break;
       }
-      if (!result.ok || /^<<<\s*LOOP_STOP\s*>>>/i.test(finalMessage.trim())) {
+      if (!result.ok || /^<<<\s*LOOP_STOP\s*>>>$/i.test(finalMessage.trim())) {
         log(`Loop stopped after ${i} run${i === 1 ? '' : 's'}.`);
         break;
       }
