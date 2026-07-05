@@ -26,6 +26,7 @@ const CONFIG_PATH = path.join(ROOT, 'config.json');
 const STATE_PATH = path.join(ROOT, 'state.json');
 const STATE_BAK_PATH = STATE_PATH + '.bak';
 const LOG_DIR = path.join(ROOT, 'logs');
+const UI_DIR = path.join(ROOT, 'ui');
 
 fs.mkdirSync(LOG_DIR, { recursive: true });
 
@@ -68,7 +69,12 @@ function isApiAuthorized(request) {
 }
 
 function configuredAllowedOrigins() {
-  const origins = new Set(['https://chatgpt.com', 'https://chat.openai.com']);
+  const origins = new Set([
+    'https://chatgpt.com',
+    'https://chat.openai.com',
+    `http://127.0.0.1:${PORT}`,
+    `http://localhost:${PORT}`,
+  ]);
   if (CONFIG.corsAllowOrigin) origins.add(String(CONFIG.corsAllowOrigin));
   for (const origin of (CONFIG.allowedOrigins || [])) origins.add(String(origin));
   return origins;
@@ -1163,6 +1169,41 @@ function sendJson(response, code, object) {
   response.end(body);
 }
 
+function sendText(response, code, text, contentType) {
+  response.writeHead(code, {
+    'Content-Type': contentType || 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  response.end(text);
+}
+
+function uiContentType(file) {
+  const ext = path.extname(file).toLowerCase();
+  if (ext === '.html') return 'text/html; charset=utf-8';
+  if (ext === '.css') return 'text/css; charset=utf-8';
+  if (ext === '.js') return 'text/javascript; charset=utf-8';
+  if (ext === '.svg') return 'image/svg+xml';
+  if (ext === '.json') return 'application/json; charset=utf-8';
+  return 'application/octet-stream';
+}
+
+function sendUiFile(response, pathname) {
+  let relative = pathname.replace(/^\/ui\/?/, '');
+  if (!relative) relative = 'index.html';
+  const file = path.resolve(UI_DIR, relative);
+  if (!isPathInside(file, UI_DIR)) {
+    return sendText(response, 403, 'Forbidden');
+  }
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    return sendText(response, 404, 'Not found');
+  }
+  response.writeHead(200, {
+    'Content-Type': uiContentType(file),
+    'Cache-Control': file.endsWith('index.html') ? 'no-store' : 'no-cache',
+  });
+  fs.createReadStream(file).pipe(response);
+}
+
 function readBody(request) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -1211,6 +1252,18 @@ const server = http.createServer(async (request, response) => {
         port: PORT,
         conversations: Object.keys(STATE.conversations).length,
       });
+    }
+
+    if (url.pathname === '/ui/config.js' && request.method === 'GET') {
+      return sendText(response, 200, `window.AEGISLOOP_UI_CONFIG=${JSON.stringify({
+        port: PORT,
+        contractVersion: CONFIG.contractVersion,
+        apiToken: API_TOKEN,
+      })};\n`, 'text/javascript; charset=utf-8');
+    }
+
+    if ((url.pathname === '/ui' || url.pathname.startsWith('/ui/')) && request.method === 'GET') {
+      return sendUiFile(response, url.pathname);
     }
 
     if (url.pathname.startsWith('/api/') && !isApiAuthorized(request)) {

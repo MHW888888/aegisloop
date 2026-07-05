@@ -1,6 +1,8 @@
 config.json
 state.json
+state.json.bak
 state.json.tmp
+bridge.pid
 logs/
 data/
 workspaces/

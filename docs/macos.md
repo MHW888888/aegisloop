@@ -60,6 +60,8 @@ The helper:
 
 - checks Node.js, npm, git, and optional GitHub CLI;
 - creates `config.json` if missing;
+- generates a local `apiToken` if missing;
+- replaces the default Windows `runtimeRoot` with a macOS user runtime path;
 - runs `npm run doctor`;
 - prints the exact next steps.
 
@@ -69,6 +71,7 @@ It does not install packages, read tokens, or change your GitHub account.
 
 ```sh
 cp config.example.json config.json
+npm run init:local
 npm run doctor
 ```
 
@@ -142,7 +145,23 @@ curl http://127.0.0.1:17380/health
 
 You should see a small JSON response.
 
-## 5. Load The Chrome Extension
+## 5. Open The Local Web UI
+
+The local web UI is served by the same bridge and does not require the Chrome extension:
+
+```sh
+open http://127.0.0.1:17380/ui/
+```
+
+or:
+
+```sh
+npm run open:ui
+```
+
+Use **Inspect workspace** for a read-only first task. Use **Run once** for controlled execution. Use **Run loop** only after one-run works and the loop has a clear stop condition.
+
+## 6. Load The Chrome Extension
 
 1. Open `chrome://extensions` in Chrome.
 2. Enable **Developer mode**.
@@ -153,7 +172,7 @@ You should see a small JSON response.
 
 Enter the same `apiToken` from `config.json` in the extension panel when prompted. For a throwaway local test only, you can start the bridge with `AEGISLOOP_ALLOW_NO_TOKEN=1`, but normal macOS setups should use a token.
 
-## 6. First Safe Run
+## 7. First Safe Run
 
 Keep the page in **Chat Mode** until you are ready.
 
@@ -173,7 +192,7 @@ Read the current project, summarize the state, list the safest next tasks, and d
 
 Use **Arm loop** only after one-run works and the thread has a clear stop condition.
 
-## 7. macOS Troubleshooting
+## 8. macOS Troubleshooting
 
 ### I got it working, but setup took a long time
 
