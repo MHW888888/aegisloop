@@ -200,6 +200,24 @@ Also check the browser console for `[LE]` logs.
 
 The likely fix is updating the selector block in `chrome-extension/content.js`.
 
+## Export Debug Snapshot
+
+Use **Export Debug Snapshot** when a route stalls or a tester reports model/browser-specific behavior.
+
+The snapshot is designed for issue comments and does not include raw prompts, raw Codex results, tokens, local workspace paths, or Codex session ids. It includes:
+
+- AegisLoop content/protocol version;
+- local bridge origin, not full private config;
+- hashed ChatGPT conversation id and hashed arm nonce;
+- current tab client id short form;
+- leader status and lease time remaining;
+- mode, local state, loop state, and last surfaced error;
+- selector health and latest assistant/user signatures;
+- pending result hash when delivery is unconfirmed;
+- latest AegisLoop submit message id short form.
+
+If a user reports `bridge_timeout`, `leader_conflict`, `auth_required`, `origin_not_allowed`, `result_delivery_unconfirmed`, or `needs_user_protocol_fix`, ask for this snapshot plus the visible panel version.
+
 ## Browser Compatibility
 
 If AegisLoop works in Chrome but fails in another browser:

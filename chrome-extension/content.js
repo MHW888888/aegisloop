@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.14';
+  const CONTENT_VERSION = '0.3.15';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -36,6 +36,7 @@
   const SEED_FRESH_CODEX_CONFIRM_MS = 15000;
   const CONTENT_BRIDGE_TIMEOUT_MS = 10000;
   const NO_CODEX_GRACE_MS = 5000;
+  const ASSISTANT_STABLE_BEFORE_REPAIR_MS = 9000;
   const TOOL_UNAVAILABLE_REPAIR_MS = 1200;
   const RESULT_DELIVERY_HOLD_MS = 10 * 60 * 1000;
   const LEADER_HEARTBEAT_MS = 5000;
@@ -162,6 +163,7 @@
     reformatCount: 0,              // bounded re-prompts since last real progress
     missingCodexSig: null,
     missingCodexFirstSeenAt: 0,
+    missingCodexStableSince: 0,
     needsProtocolFix: false,
     seedSubmitUnconfirmed: false,
     resultDeliveryUnconfirmed: null,
@@ -169,6 +171,7 @@
     leaderLease: null,
     leaderIsCurrent: false,
     lastControlError: null,
+    lastSubmitMsgId: null,
     lastLeaderHeartbeatAt: 0,
     debug: false,
     ticking: false,
@@ -193,6 +196,7 @@
     LE.reformatCount = 0;
     LE.missingCodexSig = null;
     LE.missingCodexFirstSeenAt = 0;
+    LE.missingCodexStableSince = 0;
     LE.needsProtocolFix = false;
   }
 
@@ -223,6 +227,7 @@
     LE.leaderLease = null;
     LE.leaderIsCurrent = false;
     LE.lastControlError = null;
+    LE.lastSubmitMsgId = null;
     LE.lastLeaderHeartbeatAt = 0;
     log('conversation route changed; transient state reset', id);
   }
@@ -305,6 +310,10 @@
 
   function shortId(value) {
     return value ? String(value).replace(/^tab-/, '').slice(0, 8) : '-';
+  }
+
+  function shortHash(value) {
+    return value ? ('h' + djb2(String(value)).toString(16)) : null;
   }
 
   function leaderLeaseMsLeft() {
@@ -528,6 +537,42 @@
     };
   }
 
+  function debugSnapshot() {
+    const bridgeOrigin = (() => {
+      try { return new URL(LE.bridgeUrl || DEFAULT_BRIDGE_URL).origin; }
+      catch (e) { return 'invalid_bridge_url'; }
+    })();
+    const assistant = latestAssistant();
+    const user = latestUser();
+    const h = selectorHealth();
+    const leaseLeft = leaderLeaseMsLeft();
+    return {
+      contentVersion: CONTENT_VERSION,
+      contractVersion: CONTRACT_VERSION,
+      bridgeOrigin,
+      conversationIdHash: shortHash(LE.conversationId),
+      clientId: shortId(LE.clientId),
+      leader: {
+        isCurrent: isCurrentLeader(),
+        clientId: shortId(LE.leaderLease && LE.leaderLease.clientId),
+        expiresInMs: leaseLeft,
+      },
+      mode: LE.conversationMode,
+      local: LE.local,
+      loopState: LE.loopState,
+      lastError: LE.lastControlError || LE.bridgeError || LE.pauseReason || null,
+      selectorHealth: h,
+      latestAssistantSignature: sigOf(assistant),
+      latestUserSignature: sigOf(user),
+      pendingResultIdHash: shortHash(LE.resultDeliveryUnconfirmed),
+      armNonceHash: shortHash(LE.armNonce),
+      lastSubmitMsgId: LE.lastSubmitMsgId ? shortId(LE.lastSubmitMsgId) : null,
+      seedSubmitUnconfirmed: !!LE.seedSubmitUnconfirmed,
+      resultDeliveryUnconfirmed: !!LE.resultDeliveryUnconfirmed,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   // Collect text of <pre>/<code> blocks rendered in a message (ChatGPT renders
   // ```codex as <pre><code> and innerText then loses the ``` fences).
   function codeBlocksFromNode(node) {
@@ -701,6 +746,7 @@
   async function submitToGPTDetailed(text, options) {
     const resultId = options && options.resultId;
     const msgId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+    LE.lastSubmitMsgId = msgId;
     const marker = msgIdLine(msgId);
     const resultMarker = resultId ? resultIdLine(resultId) : null;
     const markerLines = resultMarker ? `${marker}\n${resultMarker}` : marker;
@@ -972,12 +1018,20 @@
       if (LE.missingCodexSig !== sig) {
         LE.missingCodexSig = sig;
         LE.missingCodexFirstSeenAt = Date.now();
+        LE.missingCodexStableSince = Date.now();
         LE.local = 'awaiting_assistant';
-        log('no codex block yet -> grace window before protocol repair');
+        log('no codex block yet -> waiting for assistant text to stabilize');
         return;
       }
-      const graceMs = looksLikeToolUnavailable(a.text) ? TOOL_UNAVAILABLE_REPAIR_MS : NO_CODEX_GRACE_MS;
-      if (Date.now() - LE.missingCodexFirstSeenAt < graceMs) {
+      if (isStreaming()) {
+        LE.missingCodexStableSince = Date.now();
+        LE.local = 'awaiting_assistant';
+        log('assistant still streaming -> no protocol nudge');
+        return;
+      }
+      const stableForMs = Date.now() - (LE.missingCodexStableSince || LE.missingCodexFirstSeenAt || Date.now());
+      const waitMs = looksLikeToolUnavailable(a.text) ? TOOL_UNAVAILABLE_REPAIR_MS : Math.max(ASSISTANT_STABLE_BEFORE_REPAIR_MS, NO_CODEX_GRACE_MS);
+      if (stableForMs < waitMs) {
         LE.local = 'awaiting_assistant';
         return;
       }
@@ -1106,6 +1160,7 @@
         <button id="le-seed-starter">Use starter text</button>
         <div class="grid"><button id="le-chat">Chat mode</button><button id="le-send" class="go">Arm one run</button></div>
         <div class="grid"><button id="le-arm-loop" class="go">Arm loop</button><button id="le-freeze">Freeze</button></div>
+        <button id="le-debug-snapshot" style="width:100%">Export Debug Snapshot</button>
         <button id="le-stop" class="danger" style="width:100%">Stop</button>
         <div id="le-confirm" style="display:none"><div class="pill le-bad">Confirm stop?</div><div class="grid" style="margin-top:6px"><button id="le-stop-yes" class="danger">Confirm</button><button id="le-stop-no">Cancel</button></div></div>
       </div>`;
@@ -1230,6 +1285,11 @@
         resetProtocolRecovery();
       }
       renderPanel();
+    };
+    panel.querySelector('#le-debug-snapshot').onclick = async () => {
+      const snapshot = JSON.stringify(debugSnapshot(), null, 2);
+      const ok = await copyText(snapshot);
+      alert(ok ? 'Debug snapshot copied' : 'Debug snapshot copy failed');
     };
     panel.querySelector('#le-approve').onclick = async () => {
       const r = await postControl('/api/control', { conversationId: LE.conversationId, action: 'approve' });

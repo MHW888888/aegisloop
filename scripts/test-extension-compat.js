@@ -69,6 +69,10 @@ assert.doesNotMatch(content, /reason:\s*'seed_submit_not_confirmed'/, 'seed fall
 assert.match(content, /CONTENT_BRIDGE_TIMEOUT_MS = 10000/, 'content bridge calls must have a timeout safety net');
 assert.match(content, /resetTransientForConversation/, 'content must reset transient state when the ChatGPT conversation changes');
 assert.match(content, /NO_CODEX_GRACE_MS = 5000/, 'no-codex recovery must wait before nudging');
+assert.match(content, /ASSISTANT_STABLE_BEFORE_REPAIR_MS = 9000/, 'no-codex recovery must wait for stable assistant text');
+assert.match(content, /assistant still streaming -> no protocol nudge/, 'streaming replies must not be nudged');
+assert.match(content, /isStreaming\(\)[\s\S]{0,120}missingCodexStableSince = Date\.now\(\)/, 'streaming must reset the no-codex stability timer');
+assert.match(content, /stableForMs/, 'protocol recovery must use stable-text timing');
 assert.match(content, /needs_user_protocol_fix/, 'protocol repair exhaustion must use an explicit protocol-fix state');
 assert.match(content, /Selector health/, 'panel must expose selector health');
 assert.match(content, /selectorHealth/, 'content must compute selector health');
@@ -98,6 +102,11 @@ assert.match(content, /Client \/ lease/, 'panel must show client id and lease co
 assert.match(content, /button:disabled/, 'non-leader control buttons must be visibly disabled');
 assert.match(content, /Not leader: close the duplicate tab/, 'panel must explain duplicate-tab leader conflicts');
 assert.match(content, /looksLikeToolUnavailable/, 'content must classify tool-unavailable model replies');
+assert.match(content, /debugSnapshot/, 'content must provide a sanitized debug snapshot');
+assert.match(content, /Export Debug Snapshot/, 'panel must expose debug snapshot export');
+assert.match(content, /conversationIdHash/, 'debug snapshot must hash conversation ids');
+assert.match(content, /armNonceHash/, 'debug snapshot must hash arm nonces');
+assert.match(content, /lastSubmitMsgId/, 'debug snapshot must expose submit marker metadata without raw prompts');
 
 assert.match(server, /pending_result_exists/, 'server must block new dispatches while a result is pending');
 assert.match(server, /ackedHashes/, 'server must separate acked hashes from attempts');

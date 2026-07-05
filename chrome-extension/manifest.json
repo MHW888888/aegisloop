@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AegisLoop",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "description": "Let ChatGPT plan while local Codex executes through a guarded bridge.",
   "permissions": ["storage", "alarms"],
   "host_permissions": [

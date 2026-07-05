@@ -36,7 +36,7 @@ The goal: understand it in 30 seconds, run a first local loop in about 3 minutes
 
 ## Current Focus: v0.3.x Hardening
 
-Version `v0.3.14` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.15` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -69,6 +69,9 @@ Version `v0.3.14` makes the first run easier to understand and keeps the browser
 - the panel shows whether the current tab is the active leader, displays the local client id and lease countdown, and disables execution controls in duplicate tabs;
 - control writes now check bridge responses before mutating local UI state, surfacing `leader_conflict`, `auth_required`, `origin_not_allowed`, `bridge_timeout`, and `pending_result_exists` instead of silently drifting;
 - no-login real-browser recovery fixtures cover slow result recovery, duplicate suppression, leader conflicts, auth failures, and bridge timeout classification.
+- no-codex recovery now waits for the assistant text to stop streaming and stay stable before sending a protocol repair nudge;
+- the panel can export a sanitized Debug Snapshot with version, route hash, leader state, selector health, local state, and error metadata;
+- CI includes a deterministic real-loop replay fixture and a state-machine test for dispatch, ACK/NACK, pending result, leader, nonce, and protocol-fix invariants.
 
 `/health` stays public for local checks. Bridge APIs under `/api/*` are fail-closed unless you configure `apiToken`, or explicitly set `AEGISLOOP_ALLOW_NO_TOKEN=1` for a throwaway local test.
 
@@ -315,6 +318,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.12 release notes: [docs/release-notes-v0.3.12.md](docs/release-notes-v0.3.12.md)
 - v0.3.13 release notes: [docs/release-notes-v0.3.13.md](docs/release-notes-v0.3.13.md)
 - v0.3.14 release notes: [docs/release-notes-v0.3.14.md](docs/release-notes-v0.3.14.md)
+- v0.3.15 release notes: [docs/release-notes-v0.3.15.md](docs/release-notes-v0.3.15.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
