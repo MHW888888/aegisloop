@@ -96,6 +96,17 @@ function log(message) {
   $('activityLog').prepend(li);
 }
 
+function setRunResult(text) {
+  state.lastResult = text;
+  const output = $('resultOutput');
+  output.textContent = text;
+  output.scrollTop = output.scrollHeight;
+}
+
+function appendRunResult(text) {
+  setRunResult(state.lastResult ? `${state.lastResult}\n${text}` : text);
+}
+
 function clearProgress() {
   if (state.progressTimer) clearInterval(state.progressTimer);
   state.progressTimer = null;
@@ -287,6 +298,7 @@ function loopPrompt(basePrompt, runId, index, maxRuns, previousResult) {
 }
 
 async function executeIteration(conversation, clientId, prompt, label) {
+  appendRunResult(`\n## ${label}\n\n[GPT/UI -> Codex]\n${prompt}\n`);
   const mode = await api('/api/mode', {
     method: 'POST',
     body: {
@@ -296,7 +308,7 @@ async function executeIteration(conversation, clientId, prompt, label) {
     },
   });
   log(`${label}: armed ${mode.armNonce}`);
-  $('resultOutput').textContent = `${label}: dispatching task to Codex...`;
+  appendRunResult(`[Bridge]\narmed ${mode.armNonce}\ndispatching task to Codex...`);
 
   const dispatch = await api('/api/dispatch', {
     method: 'POST',
@@ -308,14 +320,16 @@ async function executeIteration(conversation, clientId, prompt, label) {
     },
   });
   log(`${label}: dispatch ${dispatch.status}`);
+  appendRunResult(`dispatch ${dispatch.status}`);
   if (!['accepted', 'busy', 'pending_result_exists'].includes(dispatch.status)) {
     throw new Error(`Dispatch did not start: ${dispatch.status}`);
   }
 
   setPill($('runStatus'), 'warn', 'Waiting result');
-  $('resultOutput').textContent = `${label}: Codex is running in the background. Waiting for result...`;
+  appendRunResult('waiting for Codex result...');
   const result = await waitForResult(conversation.conversationId);
   log(`${label}: result ${result.ok ? 'OK' : 'FAILED'} ${result.jobId || ''}`);
+  appendRunResult(`\n[Codex -> GPT/UI]\n${result.ok ? 'OK' : 'FAILED'} job=${result.jobId || '-'} turn=${result.turn || '-'}\n\n${result.finalMessage || '(no final message)'}`);
 
   await api('/api/result/ack', {
     method: 'POST',
@@ -327,6 +341,7 @@ async function executeIteration(conversation, clientId, prompt, label) {
     },
   });
   log(`${label}: acknowledged`);
+  appendRunResult('\n[Bridge]\nacknowledged; this result is available as context for the next loop iteration.');
   return result;
 }
 
@@ -347,14 +362,21 @@ async function runSequence(maxRuns) {
   $('resultSubhead').textContent = maxRuns === 1
     ? `Running ${templates[state.currentTemplate].title.toLowerCase()} in background Codex.`
     : `Running ${maxRuns} background Codex iterations.`;
-  $('resultOutput').textContent = maxRuns === 1 ? 'Arming one run...' : `Starting loop: 0 / ${maxRuns}`;
+  setRunResult([
+    `# ${maxRuns === 1 ? 'Run once transcript' : `Run loop transcript (${maxRuns} iterations requested)`}`,
+    '',
+    'This local UI sends the task directly to Codex through the bridge. The transcript below shows each prompt dispatched to Codex and each Codex result that is fed into the next iteration.',
+    '',
+    `Workspace: ${c.workspaceDir || '-'}`,
+    `Run id: ${runId}`,
+  ].join('\n'));
   setPill($('runStatus'), 'warn', 'Arming');
   startProgress();
 
   try {
     const clientId = clientIdFor(c);
-    const results = [];
     let previousResult = '';
+    let completedRuns = 0;
     for (let i = 1; i <= maxRuns; i++) {
       if (state.cancelRequested) {
         log(`Loop paused before run ${i}.`);
@@ -366,10 +388,8 @@ async function runSequence(maxRuns) {
       setPill($('runStatus'), 'warn', maxRuns === 1 ? 'Running' : `Loop ${i}/${maxRuns}`);
       const result = await executeIteration(c, clientId, prompt, maxRuns === 1 ? 'Run once' : `Loop ${i}/${maxRuns}`);
       const finalMessage = result.finalMessage || '';
-      results.push(`## ${maxRuns === 1 ? 'Run once' : `Loop ${i}/${maxRuns}`} ${result.ok ? 'OK' : 'FAILED'}\n\n${finalMessage || '(no final message)'}`);
+      completedRuns = i;
       previousResult = finalMessage;
-      state.lastResult = results.join('\n\n---\n\n');
-      $('resultOutput').textContent = state.lastResult;
       if (state.cancelRequested) {
         log(`Loop paused after ${i} run${i === 1 ? '' : 's'}.`);
         break;
@@ -382,14 +402,15 @@ async function runSequence(maxRuns) {
     $('resultOutput').classList.remove('flash');
     void $('resultOutput').offsetWidth;
     $('resultOutput').classList.add('flash');
-    $('resultSubhead').textContent = maxRuns === 1 ? 'Completed one run.' : 'Loop completed.';
+    appendRunResult(`\n# ${maxRuns === 1 ? 'Run complete' : `Loop complete: ${completedRuns}/${maxRuns} iteration${maxRuns === 1 ? '' : 's'}`}`);
+    $('resultSubhead').textContent = maxRuns === 1 ? 'Completed one run.' : `Loop completed ${completedRuns}/${maxRuns}.`;
     finishProgress(true);
     await refreshStatus(true);
   } catch (error) {
     finishProgress(false);
     setPill($('runStatus'), 'bad', 'Run failed');
     $('resultSubhead').textContent = 'Run failed.';
-    $('resultOutput').textContent = error.stack || String(error);
+    appendRunResult(`\n# Run failed\n\n${error.stack || String(error)}`);
     log(`Run failed: ${error.message}`);
   } finally {
     state.running = false;
