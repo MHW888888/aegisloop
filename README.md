@@ -23,6 +23,16 @@ The extension panel exposes the local bridge status, briefing tools, chat mode c
 
 ![AegisLoop architecture](docs/architecture.svg)
 
+## Help Test AegisLoop
+
+You can help without writing code. The most useful reports are small browser / model compatibility checks that take about 5-10 minutes.
+
+- Pick one path: Windows, macOS, Chrome, Edge, Brave, Chinese UI, or one ChatGPT model mode.
+- Run the short smoke steps in [docs/tester-guide.md](docs/tester-guide.md).
+- Paste a sanitized report in the matching GitHub issue.
+
+Please do not include real conversation IDs, tokens, local private paths, private workspace names, or private project content.
+
 ## AegisLoop Lite
 
 Version `v0.2.0` focuses on first-run clarity:

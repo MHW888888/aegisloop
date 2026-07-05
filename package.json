@@ -24,6 +24,7 @@
     "issues:stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-stability-issues.ps1",
     "issues:model-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-model-smoke-issues.ps1",
     "issues:recruit-testers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-recruitment-issue.ps1",
+    "issues:refresh-testers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/refresh-tester-issues.ps1",
     "issues:assign-stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/assign-stability-issues.ps1",
     "issues:triage-replies": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/triage-github-replies.ps1"
   },

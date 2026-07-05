@@ -10,6 +10,30 @@ Thanks for taking a look. AegisLoop is intentionally small and local-first, so t
 - Improve docs around safe `config.json` bindings.
 - Add tests for gate rules and payload parsing.
 
+## No-Code Testing Tasks
+
+You do not need to write code to help. Some of the most useful contributions are small compatibility reports:
+
+- run AegisLoop on one browser / OS combination;
+- switch one ChatGPT model mode and confirm the route stays stable;
+- paste a sanitized Debug Snapshot;
+- add one clean screenshot or short note.
+
+Good tester reports usually take 5-10 minutes and include:
+
+```text
+OS:
+Browser:
+ChatGPT UI language:
+AegisLoop version:
+Model mode tested:
+Result: pass / partial / blocked
+What happened:
+Sanitized Debug Snapshot or screenshot:
+```
+
+Please claim only one small path at a time. Comment on the issue with the browser / OS you can test, then post the report when done.
+
 ## Development Checks
 
 Run:
@@ -56,7 +80,7 @@ Good comments usually include:
 
 ## 中文说明
 
-欢迎提交 PR。这个项目优先接受小而清晰、可验证、容易 review 的改动。
+欢迎提交 PR 或测试报告。这个项目优先接受小而清晰、可验证、容易 review 的改动。
 
 请不要提交或粘贴：
 
