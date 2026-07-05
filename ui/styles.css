@@ -331,7 +331,7 @@ textarea:focus {
 }
 
 .compact-field {
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 74px minmax(78px, 1fr);
   align-items: center;
 }
 
@@ -418,7 +418,7 @@ textarea:focus {
 
 .run-bar {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-columns: minmax(160px, 176px) minmax(0, 1fr);
   gap: 6px;
   align-items: end;
 }

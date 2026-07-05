@@ -7,6 +7,7 @@ const state = {
   conversations: [],
   selectedId: '',
   running: false,
+  cancelRequested: false,
   currentTemplate: 'audit',
   lastResult: '',
   progressTimer: null,
@@ -259,7 +260,8 @@ async function runOnce() {
 }
 
 async function runLoop() {
-  const count = Math.max(2, Math.min(12, Number($('loopCount').value || 3)));
+  const rawCount = Number($('loopCount').value);
+  const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.floor(rawCount) : 3;
   $('loopCount').value = String(count);
   await runSequence(count);
 }
@@ -338,6 +340,7 @@ async function runSequence(maxRuns) {
   }
 
   state.running = true;
+  state.cancelRequested = false;
   $('runBtn').disabled = true;
   $('runLoopBtn').disabled = true;
   $('resultSubhead').textContent = maxRuns === 1
@@ -352,6 +355,10 @@ async function runSequence(maxRuns) {
     const results = [];
     let previousResult = '';
     for (let i = 1; i <= maxRuns; i++) {
+      if (state.cancelRequested) {
+        log(`Loop paused before run ${i}.`);
+        break;
+      }
       const prompt = maxRuns === 1
         ? basePrompt
         : loopPrompt(basePrompt, runId, i, maxRuns, previousResult);
@@ -362,6 +369,10 @@ async function runSequence(maxRuns) {
       previousResult = finalMessage;
       state.lastResult = results.join('\n\n---\n\n');
       $('resultOutput').textContent = state.lastResult;
+      if (state.cancelRequested) {
+        log(`Loop paused after ${i} run${i === 1 ? '' : 's'}.`);
+        break;
+      }
       if (!result.ok || /^<<<\s*LOOP_STOP\s*>>>/i.test(finalMessage.trim())) {
         log(`Loop stopped after ${i} run${i === 1 ? '' : 's'}.`);
         break;
@@ -398,6 +409,7 @@ async function waitForResult(conversationId) {
 async function pauseConversation() {
   const c = selectedConversation();
   if (!c) return;
+  state.cancelRequested = true;
   try {
     await api('/api/mode', {
       method: 'POST',
@@ -408,7 +420,7 @@ async function pauseConversation() {
         reason: 'ui_pause',
       },
     });
-    log('Paused conversation.');
+    log(state.running ? 'Pause requested. Current run may finish before the loop stops.' : 'Paused conversation.');
     await refreshStatus(true);
   } catch (error) {
     log(`Pause failed: ${error.message}`);
