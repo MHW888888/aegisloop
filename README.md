@@ -334,6 +334,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.15 release notes: [docs/release-notes-v0.3.15.md](docs/release-notes-v0.3.15.md)
 - v0.3.16 release notes: [docs/release-notes-v0.3.16.md](docs/release-notes-v0.3.16.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
+- Promotion playbook: [docs/promotion-playbook.md](docs/promotion-playbook.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
 - Launch post drafts: [docs/launch-posts.md](docs/launch-posts.md)
 - Demo contributor issue pack: [docs/demo-issue-pack.md](docs/demo-issue-pack.md)
