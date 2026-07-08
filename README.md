@@ -140,6 +140,8 @@ The short path:
 3. Keep the thread in **Chat Mode** until you are ready.
 4. Click **Arm one run** for one safe dispatch, or **Arm loop** for a bounded loop.
 
+For a harmless first run, point `workspaceDir` at [examples/sample-workspace](examples/sample-workspace). It contains only tiny editable text files, no dependencies, no external services, and no secrets.
+
 For a step-by-step walkthrough, see [docs/first-run.md](docs/first-run.md).
 
 If you are asking "what should I type first?", use the [Onboarding Playbook](docs/onboarding.md).

@@ -12,6 +12,8 @@ You need:
 2. A local Codex session id.
 3. A local workspace folder.
 
+For a first test, use `examples/sample-workspace` as the workspace. It is intentionally tiny and contains no secrets, build tools, dependencies, or external services.
+
 The binding lives in your local `config.json`. ChatGPT output cannot choose the session or workspace for you.
 
 ```json
@@ -69,7 +71,7 @@ If the task should stop, reply exactly <<<LOOP_STOP>>>.
 
 Then click **Arm one run**.
 
-AegisLoop appends the live protocol text and arm nonce automatically.
+AegisLoop appends the live protocol text, current `armId`, and visible turn token automatically.
 
 ## 5. Recommended First Codex Task
 
@@ -79,7 +81,9 @@ For a new project, ask for a harmless read-only first pass:
 ```codex
 {
   "aegisloop": true,
-  "arm_nonce": "filled-by-aegisloop",
+  "arm_id": "filled-by-aegisloop",
+  "turn_nonce": "filled-by-aegisloop",
+  "arm_nonce": "same-as-turn_nonce-for-legacy-compat",
   "prompt": "Read the project, summarize the current state, list the safest next tasks, and do not modify files. Run only lightweight read-only checks if needed."
 }
 ```
@@ -91,7 +95,9 @@ For a real runner thread with Run Capsule and briefing files:
 ```codex
 {
   "aegisloop": true,
-  "arm_nonce": "filled-by-aegisloop",
+  "arm_id": "filled-by-aegisloop",
+  "turn_nonce": "filled-by-aegisloop",
+  "arm_nonce": "same-as-turn_nonce-for-legacy-compat",
   "prompt": "Read capsule.json and all files under inbox first. Execute only the current active_branch objective. Write artifacts only under allowed_write_root. Do not modify source_dir."
 }
 ```

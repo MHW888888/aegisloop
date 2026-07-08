@@ -25,6 +25,8 @@ Prepare:
 3. A local Codex session id.
 4. A dedicated ChatGPT runner thread.
 
+For the safest first run, use `examples/sample-workspace` as `workspaceDir`. It contains only tiny editable text files and no secrets, dependencies, or external services.
+
 Run:
 
 ```powershell
@@ -101,7 +103,9 @@ For a first safe run, ask Codex to read only:
 ```codex
 {
   "aegisloop": true,
-  "arm_nonce": "filled-by-aegisloop",
+  "arm_id": "filled-by-aegisloop",
+  "turn_nonce": "filled-by-aegisloop",
+  "arm_nonce": "same-as-turn_nonce-for-legacy-compat",
   "prompt": "Read the project, summarize the current state, list the safest next tasks, and do not modify files. Run only lightweight read-only checks if needed."
 }
 ```

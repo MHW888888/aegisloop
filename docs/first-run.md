@@ -79,7 +79,7 @@ The panel's **Use starter text** button fills this for you.
 
 ## What Success Looks Like
 
-1. AegisLoop arms the thread and injects a fresh nonce.
+1. AegisLoop arms the thread and injects a fresh `armId` plus visible turn token.
 2. ChatGPT replies with a fresh `codex` task.
 3. AegisLoop sends that task to local Codex.
 4. Codex runs in your configured workspace.

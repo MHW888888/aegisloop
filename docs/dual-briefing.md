@@ -149,13 +149,15 @@ The ChatGPT `codex` block can stay short:
 ```codex
 {
   "aegisloop": true,
+  "arm_id": "arm_xxx",
+  "turn_nonce": "aegis-YYYYMMDD-xxxx",
   "arm_nonce": "aegis-YYYYMMDD-xxxx",
   "prompt": "Read capsule.json and all files under inbox first. Execute only the current active_branch objective. Write artifacts only under allowed_write_root. Do not modify source_dir."
 }
 ```
 ````
 
-AegisLoop injects the live `arm_nonce` when you arm the thread from the extension panel.
+AegisLoop injects the live `arm_id` and visible `turn_nonce` when you arm the thread from the extension panel. The legacy `arm_nonce` field mirrors the turn token for older prompt examples; it is not a password or authentication secret.
 
 ## Step 5: Use The Right Thread Role / 第五步：分清线程角色
 
@@ -197,7 +199,7 @@ Report coverage, blockers, and whether V8.5 readiness is still blocked.
 | Symptom | Meaning | Fix |
 | --- | --- | --- |
 | ChatGPT answers normally | The thread is in Chat Mode or the GPT brief was not pasted | Paste `GPT_THREAD_BRIEF.md`, then Arm one run |
-| A `codex` block is ignored | It is old or missing the current nonce | Arm again and ask GPT for a fresh block |
+| A `codex` block is ignored | It is old or missing the current `arm_id` / `turn_nonce` | Arm again and ask GPT for a fresh block |
 | The wrong branch is mentioned | The prompt is missing `activeBranch` or uses frozen context | Freeze the thread, correct the brief, start a new runner thread |
 | Codex writes to the source project | `readonly` is a prompt/cwd guard, not an OS sandbox | Use sandbox/worktree mode or require patch-only output |
 

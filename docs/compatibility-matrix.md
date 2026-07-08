@@ -93,7 +93,7 @@ If a Pro or reasoning model says it cannot find the tool, do not debug Codex fir
 3. Click **Use starter text**.
 4. Click **Arm one run**.
 5. If the model says it has no tools, paste the correction prompt from [model-compatibility.md](model-compatibility.md).
-6. A pass means the model emits a fresh nonce-bearing fenced `codex` JSON block.
+6. A pass means the model emits a fresh fenced `codex` JSON block with the current `arm_id` and `turn_nonce`.
 
 If it still refuses after three nudges, file a **Model compatibility report**. Do not claim that the bridge, browser, or Codex failed unless their own layer checks fail too.
 
@@ -101,7 +101,7 @@ If it still refuses after three nudges, file a **Model compatibility report**. D
 
 Record one row per real test:
 
-| OS | Browser | Model / mode | Health OK | Panel online | Fresh nonce block | Dispatch OK | Result ACK | Verdict |
+| OS | Browser | Model / mode | Health OK | Panel online | Fresh turn-token block | Dispatch OK | Result ACK | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Windows | Chrome | standard model | yes/no | yes/no | yes/no | yes/no | yes/no | Pass/Warn/Fail |
 | Windows | Edge | standard model | yes/no | yes/no | yes/no | yes/no | yes/no | Pass/Warn/Fail |

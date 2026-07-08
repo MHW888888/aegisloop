@@ -90,7 +90,7 @@ Do not include real conversation ids, local paths, tokens, private workspace nam
 Create sanitized screenshots for two beginner-critical states:
 
 - Chat Mode: automation off
-- Arm one run: waiting for a fresh nonce block
+- Arm one run: waiting for a fresh turn-token block
 
 All values should be fake, placeholder, or redacted.
 "@

@@ -31,7 +31,7 @@ same conversationId
 same local Codex session binding
 same Run Capsule if configured
 same pending result / ACK state
-same active arm nonce until it expires or is consumed
+same active armId and turn token until they expire or are consumed
 ```
 
 Model switching should only affect the next assistant reply style. It should not:
@@ -61,7 +61,7 @@ Good recovery path:
 
 | Model family / mode | Expected behavior | What to watch |
 | --- | --- | --- |
-| Smart / 智能 | Usually chooses a balanced model automatically. | Treat it like a normal model; verify one fresh nonce block. |
+| Smart / 智能 | Usually chooses a balanced model automatically. | Treat it like a normal model; verify one fresh turn-token block. |
 | Fast / 极速 | Usually follows short instructions quickly. | Keep the first task small; check for underspecified prompts. |
 | Balanced / 均衡 | Usually the safest default for first-run testing. | Good baseline before testing higher modes. |
 | Advanced / 高级 | Usually follows the contract with enough context. | Avoid overlong first tasks. |
@@ -71,7 +71,7 @@ Good recovery path:
 | General chat models | Usually follow the fenced `codex` block contract after one clear instruction. | May summarize instead of emitting a block. Use the reformat nudge. |
 | Pro / reasoning modes | May overthink "use Codex" and look for a built-in tool. | Remind it that AegisLoop is page-text based, not a ChatGPT tool call. |
 | Faster / lighter models | May obey format but produce shorter or underspecified tasks. | Keep the first objective small and concrete. |
-| Older saved chats | May contain stale `codex` blocks. | Use **Arm one run** so only fresh nonce-bearing blocks dispatch. |
+| Older saved chats | May contain stale `codex` blocks. | Use **Arm one run** so only fresh `arm_id` + `turn_nonce` blocks dispatch. |
 
 Do not claim support for a specific model version until someone has run the smoke test below in the real ChatGPT UI.
 
@@ -101,7 +101,7 @@ Use a harmless sample workspace.
 5. Paste the model brief below.
 6. Click **Use starter text**.
 7. Click **Arm one run**.
-8. Confirm the model returns exactly one fresh fenced `codex` JSON block with the current `arm_nonce`.
+8. Confirm the model returns exactly one fresh fenced `codex` JSON block with the current `arm_id` and `turn_nonce`.
 9. Confirm AegisLoop dispatches the block and returns a Codex result.
 10. Confirm the model can either produce a next fresh `codex` block or `<<<LOOP_STOP>>>`.
 11. Switch to another model in the same ChatGPT conversation and confirm the extension still shows the same bound local Codex session.
