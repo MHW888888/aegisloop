@@ -40,6 +40,14 @@ This appears to be a configuration prerequisite rather than an Edge compatibilit
 
 ## Screenshots
 
+![Extension loaded](images/edge-extension.png)
+
 - Extension loaded in Edge
+
+![Panel on ChatGPT](images/chatgpt-panel.png)
+
 - AegisLoop panel visible on ChatGPT
+
+![Bridge online](images/bridge-online.png)
+
 - Local bridge online
