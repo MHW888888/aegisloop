@@ -29,14 +29,15 @@ If you change the bridge port, update **Local bridge URL** in the extension pane
 http://127.0.0.1:17380
 ```
 
-The panel only accepts local bridge origins:
+### Local Bridge URL Validation
 
-```text
-http://127.0.0.1:<port>
-http://localhost:<port>
-```
+The extension panel performs validation checks on the configured **Local bridge URL** to ensure a secure, local-only connection:
 
-Do not paste `/health`, `https://`, a remote host, or a URL without a port into **Local bridge URL**. For example, use `http://127.0.0.1:17380`, not `http://127.0.0.1:17380/health`.
+- **Validation Rule**: Only URLs starting with `http://127.0.0.1:` or `http://localhost:` are accepted. Any other hostnames, external IPs, secure schemes (`https`), or unexpected paths/suffixes are rejected.
+- **Valid Example**: `http://127.0.0.1:17380` (uses correct scheme, loopback IP, and port).
+- **Invalid Example (Wrong Scheme)**: `https://127.0.0.1:17380` (HTTPS is not allowed).
+- **Invalid Example (Path/Suffix)**: `http://127.0.0.1:17380/health` (endpoint paths are not allowed in the base URL).
+
 
 If the panel reports `bridge_timeout`, the page request to the local bridge took too long. Keep the ChatGPT thread open, confirm the terminal running `npm start` is still alive, and retry after `/health` responds again. AegisLoop keeps the local route state instead of silently dropping the run.
 
