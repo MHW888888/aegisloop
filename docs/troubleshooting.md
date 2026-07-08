@@ -13,6 +13,14 @@ Invoke-RestMethod http://127.0.0.1:17380/health
 
 If another process already uses the port, stop that process or change the bridge port in your local setup.
 
+## Local Bridge URL Validation
+
+The local bridge accepts only connections that match its URL validation rules:
+
+- **The Rule**: Only URLs starting with `http://127.0.0.1:` or `http://localhost:` are accepted. Any other format (different scheme, different host, or unexpected path/suffix) is rejected.
+- **Valid Example**: `http://127.0.0.1:17380` (uses correct scheme, loopback IP, and port).
+- **Invalid Example**: `https://127.0.0.1:17380` (wrong scheme — HTTPS is not allowed by the local bridge).
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.
