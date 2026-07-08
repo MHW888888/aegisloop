@@ -1,0 +1,12 @@
+Welcome to the AegisLoop sample workspace.
+
+This file exists only for testing.
+
+You can safely ask Codex to:
+
+- summarize this text
+- improve the wording
+- fix grammar
+- append another paragraph
+
+No secrets, credentials, or private information are stored here.
