@@ -40,7 +40,7 @@ This appears to be a configuration prerequisite rather than an Edge compatibilit
 
 ## Screenshots
 
-![Extension loaded](images/edge-extension.png)
+![Extension loaded](images/edge-extension-loaded.png)
 
 - Extension loaded in Edge
 
