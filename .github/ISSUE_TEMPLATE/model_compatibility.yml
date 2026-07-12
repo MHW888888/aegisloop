@@ -6,14 +6,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this for model-specific behavior such as "5.5 Pro says it cannot find the tool" or "5.3 emits a valid codex block".
+        Use this for model-specific behavior such as "GPT-5.6 started built-in Codex instead of returning a visible block" or "5.5 emits a valid codex block".
 
         Please do not post tokens, real conversation ids, private local paths, screenshots with secrets, ads, payment links, or wallet addresses.
   - type: input
     id: model
     attributes:
       label: Model / mode tested
-      placeholder: "Example: Balanced, Ultra, Professional, GPT-5.5, GPT-5.4, GPT-5.3, o3"
+      placeholder: "Example: GPT-5.6 Sol, Terra, Luna, Ultra, GPT-5.5, GPT-5.4, GPT-5.3, o3"
     validations:
       required: true
   - type: dropdown
@@ -43,7 +43,7 @@ body:
     id: behavior
     attributes:
       label: Observed behavior
-      description: Describe whether the model emitted a codex block, claimed no tool was available, or needed a correction prompt.
+      description: Describe whether the model emitted a codex block, started built-in Codex, claimed no tool was available, or needed a correction prompt.
     validations:
       required: true
   - type: checkboxes

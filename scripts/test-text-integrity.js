@@ -145,6 +145,26 @@ for (const expected of ['OS / local bridge', 'ChatGPT model output contract', 'G
   }
 }
 
+const codexCoexistence = read('docs/codex-coexistence.md');
+for (const expected of ['Choose One Route Per Turn', 'Execution route: AegisLoop local bridge', 'GPT-5.6 Sol, Terra, and Luna', '与内置 Codex 共存', '不替代这些原生入口']) {
+  if (!codexCoexistence.includes(expected)) {
+    fail(`docs/codex-coexistence.md should mention ${expected}`);
+  }
+}
+
+const releaseNotes0317 = read('docs/release-notes-v0.3.17.md');
+for (const expected of ['Codex built into ChatGPT', 'Execution route: AegisLoop local bridge', 'GPT-5.6 Sol, Terra, and Luna']) {
+  if (!releaseNotes0317.includes(expected)) {
+    fail(`docs/release-notes-v0.3.17.md should mention ${expected}`);
+  }
+}
+
+for (const expected of ['GPT-5.6 Sol', 'GPT-5.6 Terra', 'GPT-5.6 Luna']) {
+  if (!modelCompatibility.includes(expected) || !compatibilityMatrix.includes(expected)) {
+    fail(`model docs should mention ${expected}`);
+  }
+}
+
 const modelIssueTemplate = read('.github/ISSUE_TEMPLATE/model_compatibility.yml');
 for (const expected of [
   '"Pass: valid codex block on first try"',

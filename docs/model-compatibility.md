@@ -1,6 +1,6 @@
 # Model Compatibility
 
-AegisLoop does not depend on a private ChatGPT tool call. It depends on plain text:
+AegisLoop is not a built-in ChatGPT tool. It uses a separate local bridge route and depends on plain text:
 
 ```text
 the model writes one fenced codex JSON block
@@ -8,7 +8,7 @@ AegisLoop reads that block from the ChatGPT page
 the local bridge sends the prompt to local Codex
 ```
 
-That means model compatibility is mostly about whether the selected ChatGPT model follows the output contract.
+That means model compatibility is mostly about whether the selected ChatGPT model follows the output contract. ChatGPT's built-in Codex is a different route; see [codex-coexistence.md](codex-coexistence.md).
 
 For OS, browser, ChatGPT DOM, model, and Codex executor triage in one place, see [compatibility-matrix.md](compatibility-matrix.md).
 
@@ -18,7 +18,7 @@ Model switching is route-neutral. AegisLoop binds by ChatGPT `conversationId`, n
 same ChatGPT conversation URL = same local Codex session binding
 ```
 
-Switching between Smart, Fast, Balanced, Advanced, Ultra, Professional, GPT-5.5, GPT-5.4, GPT-5.3, or o3 inside the same ChatGPT conversation should not change the Codex route. Only a different ChatGPT conversation URL, a config change, or an explicit reconnect should change the binding.
+Switching between Smart, Fast, Balanced, Advanced, Ultra, Professional, GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4, GPT-5.3, or o3 inside the same ChatGPT conversation should not change the Codex route. Only a different ChatGPT conversation URL, a config change, or an explicit reconnect should change the binding.
 
 ## Smooth Model Switching
 
@@ -67,7 +67,8 @@ Good recovery path:
 | Advanced / 高级 | Usually follows the contract with enough context. | Avoid overlong first tasks. |
 | Ultra / 超高 | May spend more effort reasoning about the request. | Remind it not to call tools if it over-interprets Codex. |
 | Professional / 专业 | May behave like a stronger reasoning/profile mode. | Use the model brief before arming. |
-| GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Should work if the selected model writes visible page text. | Do not claim support until a real smoke report exists for that exact mode. |
+| GPT-5.6 Sol / Terra / Luna | Current smoke targets. | Keep the AegisLoop local bridge route selected; record any built-in Codex handoff. |
+| GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Legacy smoke targets that should work if they write visible page text. | Do not claim support until a real smoke report exists for that exact mode. |
 | General chat models | Usually follow the fenced `codex` block contract after one clear instruction. | May summarize instead of emitting a block. Use the reformat nudge. |
 | Pro / reasoning modes | May overthink "use Codex" and look for a built-in tool. | Remind it that AegisLoop is page-text based, not a ChatGPT tool call. |
 | Faster / lighter models | May obey format but produce shorter or underspecified tasks. | Keep the first objective small and concrete. |
@@ -96,7 +97,7 @@ Use a harmless sample workspace.
 
 1. Start the local bridge.
 2. Open a fresh ChatGPT runner thread.
-3. Select the model you want to test, for example a 5.3 or 5.5 Pro mode.
+3. Select the model you want to test, for example GPT-5.6 Sol, Terra, Luna, or a legacy 5.x mode.
 4. Keep the thread in **Chat Mode**.
 5. Paste the model brief below.
 6. Click **Use starter text**.
@@ -118,10 +119,10 @@ Test one axis at a time. Keep the same OS, browser, workspace, and thread while 
 | 4 | Advanced / 高级 | Checks stronger general mode behavior. |
 | 5 | Ultra / 超高 | Checks longer reasoning without tool-call confusion. |
 | 6 | Professional / 专业 | Checks professional/reasoning profile behavior. |
-| 7 | GPT-5.3 | Checks the specific 5.3 submenu target. |
-| 8 | GPT-5.4 | Checks the specific 5.4 submenu target. |
-| 9 | GPT-5.5 | Checks the highest 5.x submenu target. |
-| 10 | o3 | Checks older/deeper reasoning behavior. |
+| 7 | GPT-5.6 Sol | Checks the current coding-oriented target. |
+| 8 | GPT-5.6 Terra | Checks the current deeper-reasoning target. |
+| 9 | GPT-5.6 Luna | Checks the current broader model-family target. |
+| 10 | GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Keeps legacy model coverage visible. |
 
 If one mode fails, rerun the same mode with the correction prompt before changing browser or OS.
 
@@ -168,7 +169,8 @@ Paste this before arming:
 ```text
 This is an AegisLoop runner thread.
 
-AegisLoop is not a built-in ChatGPT tool.
+AegisLoop uses a separate local bridge route from ChatGPT's built-in Codex.
+Do not start or invoke built-in Codex for this AegisLoop turn.
 Do not call tools, search for tools, or say that no tool is available.
 Even if you are a Pro or reasoning model, do not answer with a tool-availability disclaimer.
 

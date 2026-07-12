@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.16';
+  const CONTENT_VERSION = '0.3.17';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -90,7 +90,8 @@
       '',
       `[AegisLoop protocol ${CONTRACT_VERSION}]`,
       'Evaluate the Codex result above, then give the next step.',
-      'AegisLoop is NOT a built-in ChatGPT tool. Do not try to call a tool.',
+      'ChatGPT may offer built-in Codex, but this runner uses the separate AegisLoop local bridge route.',
+      "Do not start or invoke ChatGPT's built-in Codex from this reply.",
       'The turn token is visible and non-secret. It only proves freshness for this armed turn.',
       'If you are in a Pro or reasoning mode, do not answer with a tool-availability disclaimer.',
       'To use local Codex, write the next instruction as plain JSON inside a fenced ```codex block.',
@@ -114,7 +115,8 @@
     const turnNonce = LE.turnNonce || LE.armNonce || 'TURN_TOKEN_FROM_PANEL';
     return [
       '[AegisLoop] Your last reply had no usable fenced codex block.',
-      'AegisLoop is not a built-in ChatGPT tool. Do not call or search for tools.',
+      "This runner uses the AegisLoop local bridge, not ChatGPT's built-in Codex.",
+      'Do not start built-in Codex, call tools, or search for tools.',
       'Do not answer that the tool is unavailable; AegisLoop reads visible page text after you reply.',
       'Reply with ONLY one JSON fenced codex block containing arm_id="' + armId + '", turn_nonce="' + turnNonce + '", and the next instruction,',
       'or output exactly one line <<<LOOP_STOP>>> if the task is complete. Nothing else.',
@@ -125,7 +127,8 @@
     return [
       'Read the AegisLoop GPT brief above if present.',
       'This is a runner thread, not a normal Q&A thread.',
-      'Do not call ChatGPT tools. AegisLoop works by reading your fenced codex JSON block.',
+      "Use the AegisLoop local bridge route. Do not start ChatGPT's built-in Codex or call ChatGPT tools.",
+      'AegisLoop works by reading your fenced codex JSON block from this page.',
       'If you are a Pro or reasoning model, still write page text instead of looking for a tool.',
       'Give the smallest safe next local Codex task for the current project/branch/objective.',
       'If the task should stop, reply exactly <<<LOOP_STOP>>>.',
@@ -1172,6 +1175,7 @@
         </div>
         <div class="row"><span class="k">ChatGPT tab</span><span id="le-conv" class="muted">-</span></div>
         <div class="row"><span class="k">Local Codex session</span><span id="le-sess" class="muted">-</span></div>
+        <div class="row"><span class="k">Execution route</span><span class="pill le-ok">AegisLoop local bridge</span></div>
         <div class="row"><span class="k">Mode</span><span id="le-state" class="pill le-run">-</span></div>
         <div class="row"><span class="k">Tab leader</span><span id="le-leader" class="pill le-warn">checking</span></div>
         <div class="row"><span class="k">Client / lease</span><span id="le-client" class="muted">-</span></div>
@@ -1184,7 +1188,7 @@
             <li>Use starter text, then Arm one run.</li>
           </ol>
           <div class="tip">Use a dedicated runner thread. Switching GPT models keeps the same Codex route while the ChatGPT conversation URL stays the same.</div>
-          <div class="tip">If a Pro or GPT-5.x model says no tool is available, keep this route and ask it for a visible codex JSON block.</div>
+          <div class="tip">Built-in Codex is a separate route. For this runner, keep AegisLoop selected and ask GPT-5.6 or another model for a visible codex JSON block.</div>
         </div>
         <div id="le-capsule" class="capsule">
           <div class="row"><span class="k">Capsule</span><span id="le-capsule-state" class="pill le-warn">legacy</span></div>

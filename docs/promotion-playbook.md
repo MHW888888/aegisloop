@@ -7,13 +7,13 @@ The aim is not to inflate stars. The aim is to recruit real users, testers, and 
 ## Current Best Pitch
 
 ```text
-AegisLoop lets ChatGPT plan while local Codex executes, with local safety gates and explicit user control.
+AegisLoop complements built-in Codex with an explicit, guarded route from a ChatGPT runner thread to an existing local Codex session.
 ```
 
 Use this when the reader has only a few seconds:
 
 ```text
-ChatGPT plans. Codex executes locally. AegisLoop keeps the loop guarded.
+Native Codex for native workflows. AegisLoop when you need an existing local session, explicit arming, isolation, recovery, and audit state.
 ```
 
 ## Who To Reach
@@ -40,7 +40,7 @@ ChatGPT plans. Codex executes locally. AegisLoop keeps the loop guarded.
 2. Pick one concrete ask.
    - "Can someone test macOS Chrome?"
    - "Can someone review this screenshot PR?"
-   - "Can someone run GPT-5.5 model switching?"
+   - "Can someone run GPT-5.6 Sol/Terra/Luna model switching?"
    - "Can someone try first-run setup and tell me where it breaks?"
 
 3. Post once per channel.
@@ -107,9 +107,9 @@ No coding required.
 Can you test one path?
 - Windows / macOS
 - Chrome / Edge / Brave
-- GPT-5.5 / 5.4 / 5.3 / o3 model switching
+- GPT-5.6 Sol / Terra / Luna model switching
 
-Goal: same ChatGPT conversation -> same local Codex route.
+Goal: same ChatGPT conversation -> same AegisLoop local Codex route, with no accidental built-in Codex handoff.
 
 https://github.com/MHW888888/aegisloop
 ```
