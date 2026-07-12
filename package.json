@@ -1,6 +1,6 @@
 {
   "name": "aegisloop",
-  "version": "0.3.17",
+  "version": "0.3.18",
   "private": false,
   "description": "A guarded control plane for explicit ChatGPT-to-local-Codex execution.",
   "main": "server.js",
@@ -8,7 +8,11 @@
   "scripts": {
     "start": "node server.js",
     "start:bridge": "node server.js",
-    "check": "node --check server.js && node --check config-validation.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-api-flow.js && node --check scripts/test-chatgpt-dom-fixture.js && node --check scripts/test-config-validation.js && node --check scripts/test-extension-compat.js && node --check scripts/test-real-browser-recovery-fixture.js && node --check scripts/test-real-loop-fixture.js && node --check scripts/test-state-machine.js && node --check scripts/test-text-integrity.js && node --check scripts/test-unicode-runtime.js && node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-extension-compat.js && node scripts/test-chatgpt-dom-fixture.js && node scripts/test-real-browser-recovery-fixture.js && node scripts/test-real-loop-fixture.js && node scripts/test-state-machine.js && node scripts/test-text-integrity.js && node scripts/test-api-flow.js && node scripts/test-unicode-runtime.js",
+    "check": "npm run check:static && npm run test:unit && npm run test:bridge && npm run test:fixture",
+    "check:static": "node --check server.js && node --check config-validation.js && node --check core/job-journal.js && node --check executors/cli-adapter.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check scripts/doctor.js && node --check scripts/test-api-flow.js && node --check scripts/test-job-journal.js && node --check scripts/test-structured-executor.js && node --check scripts/test-structured-server.js",
+    "test:unit": "node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-extension-compat.js && node scripts/test-chatgpt-dom-fixture.js && node scripts/test-state-machine.js && node scripts/test-structured-executor.js && node scripts/test-job-journal.js && node scripts/test-text-integrity.js",
+    "test:bridge": "node scripts/test-api-flow.js && node scripts/test-structured-server.js && node scripts/test-unicode-runtime.js",
+    "test:fixture": "node scripts/test-real-browser-recovery-fixture.js && node scripts/test-real-loop-fixture.js",
     "doctor": "node scripts/doctor.js",
     "setup:mac": "sh scripts/setup-macos.sh",
     "test:config": "node scripts/test-config-validation.js",

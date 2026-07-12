@@ -43,9 +43,9 @@ async function fetchJson(url, options = {}) {
   return { status: response.status, json };
 }
 
-async function waitForResult(base, token, conversationId) {
+async function waitForResult(base, token, conversationId, clientId) {
   for (let i = 0; i < 30; i++) {
-    const result = await fetchJson(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}`, {
+    const result = await fetchJson(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=${encodeURIComponent(clientId)}`, {
       headers: { 'X-AegisLoop-Token': token },
     });
     assert.strictEqual(result.status, 200);
@@ -78,6 +78,7 @@ async function main() {
   const repo = path.join(parent, 'repo');
   const workspaceDir = path.join(parent, 'workspace');
   const runtimeRoot = path.join(parent, 'runtime');
+  const invocationLog = path.join(parent, 'fake-codex-invocations.log');
   const branch = 'V8.4b-SW';
   fs.mkdirSync(workspaceDir, { recursive: true });
   copyDir(ROOT, repo);
@@ -87,6 +88,11 @@ async function main() {
     'let input = "";',
     'process.stdin.on("data", chunk => { input += chunk; });',
     'process.stdin.on("end", () => {',
+    '  require("fs").appendFileSync(' + JSON.stringify(invocationLog) + ', (input.includes("INFRA_FAIL") ? "INFRA_FAIL" : "OTHER") + "\\n");',
+    '  if (input.includes("INFRA_FAIL")) {',
+    '    console.error("ECONNRESET simulated after possible side effect");',
+    '    process.exit(2);',
+    '  }',
     '  if (input.includes("FAIL_TASK")) {',
     '    console.error("FAKE_CODEX_FAIL");',
     '    process.exit(2);',
@@ -290,13 +296,19 @@ async function main() {
     assert.strictEqual(accepted.status, 200);
     assert.strictEqual(accepted.json.status, 'accepted');
 
-    const result = await waitForResult(base, token, conversationId);
+    const result = await waitForResult(base, token, conversationId, clientId);
     assert.strictEqual(result.ok, true);
     assert.match(result.resultId, /^res_[a-f0-9]{16}$/);
     assert.match(result.finalMessage, /FAKE_CODEX_OK/);
     assert.match(result.finalMessage, /HAS_BRANCH/);
 
-    const stillPending = await fetchJson(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}`, {
+    const nonLeaderResult = await fetchJson(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=${encodeURIComponent(otherClientId)}`, {
+      headers: { 'X-AegisLoop-Token': token },
+    });
+    assert.strictEqual(nonLeaderResult.status, 409);
+    assert.strictEqual(nonLeaderResult.json.status, 'leader_conflict');
+
+    const stillPending = await fetchJson(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=${encodeURIComponent(clientId)}`, {
       headers: { 'X-AegisLoop-Token': token },
     });
     assert.strictEqual(stillPending.status, 200);
@@ -333,7 +345,7 @@ async function main() {
     assert.strictEqual(ackAgain.status, 200);
     assert.strictEqual(ackAgain.json.status, 'already_acked');
 
-    const afterAck = await fetchJson(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}`, {
+    const afterAck = await fetchJson(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=${encodeURIComponent(clientId)}`, {
       headers: { 'X-AegisLoop-Token': token },
     });
     assert.strictEqual(afterAck.status, 200);
@@ -357,7 +369,7 @@ async function main() {
     assert.strictEqual(loopAccepted.json.status, 'accepted');
     assert.ok(loopAccepted.json.turnNonce, 'arm_loop should rotate to the next turn token');
     assert.notStrictEqual(loopAccepted.json.turnNonce, firstLoopTurnNonce);
-    const loopResult = await waitForResult(base, token, conversationId);
+    const loopResult = await waitForResult(base, token, conversationId, clientId);
     assert.strictEqual(loopResult.ok, true);
     const loopAck = await fetchJson(`${base}/api/result/ack`, {
       method: 'POST',
@@ -406,7 +418,7 @@ async function main() {
     });
     assert.strictEqual(failedDispatch.status, 200);
     assert.strictEqual(failedDispatch.json.status, 'accepted');
-    const failedResult = await waitForResult(base, token, conversationId);
+    const failedResult = await waitForResult(base, token, conversationId, clientId);
     assert.strictEqual(failedResult.ok, false);
     const failedAck = await fetchJson(`${base}/api/result/ack`, {
       method: 'POST',
@@ -429,7 +441,7 @@ async function main() {
     });
     assert.strictEqual(retryFailedDispatch.status, 200);
     assert.strictEqual(retryFailedDispatch.json.status, 'accepted');
-    const retryFailedResult = await waitForResult(base, token, conversationId);
+    const retryFailedResult = await waitForResult(base, token, conversationId, clientId);
     assert.strictEqual(retryFailedResult.ok, false);
     const retryFailedAck = await fetchJson(`${base}/api/result/ack`, {
       method: 'POST',
@@ -438,6 +450,32 @@ async function main() {
     });
     assert.strictEqual(retryFailedAck.status, 200);
     assert.strictEqual(retryFailedAck.json.ok, true);
+
+    const infraArm = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, clientId, action: 'arm_once' }),
+    });
+    assert.strictEqual(infraArm.status, 200);
+    const infraDispatch = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: dispatchBody(conversationId, clientId, infraArm.json, `Execute ${branch} INFRA_FAIL`),
+    });
+    assert.strictEqual(infraDispatch.status, 200);
+    assert.strictEqual(infraDispatch.json.status, 'accepted');
+    const infraResult = await waitForResult(base, token, conversationId, clientId);
+    assert.strictEqual(infraResult.ok, false);
+    const infraInvocations = fs.readFileSync(invocationLog, 'utf8')
+      .split(/\r?\n/)
+      .filter(line => line === 'INFRA_FAIL');
+    assert.strictEqual(infraInvocations.length, 1, 'infra failures must not be retried blindly');
+    const infraAck = await fetchJson(`${base}/api/result/ack`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, clientId, jobId: infraResult.jobId, resultId: infraResult.resultId }),
+    });
+    assert.strictEqual(infraAck.status, 200);
 
     await wait(200);
     const auditPath = path.join(repo, 'logs', conversationId + '.jsonl');

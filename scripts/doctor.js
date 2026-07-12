@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { createExecutorAdapter, probeCodexCapabilities } = require('../executors/cli-adapter');
 
 const ROOT = path.resolve(__dirname, '..');
 const CONFIG_PATH = path.join(ROOT, 'config.json');
@@ -26,6 +27,21 @@ function exists(file) {
 
 function isPlaceholder(value) {
   return typeof value === 'string' && /YOUR_|\\path\\to\\your|C:\\path\\to/i.test(value);
+}
+
+function findOnPath(command) {
+  const extensions = process.platform === 'win32'
+    ? String(process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
+    : [''];
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
+    for (const ext of extensions) {
+      const candidate = path.join(dir, command + ext.toLowerCase());
+      if (exists(candidate)) return candidate;
+      const upper = path.join(dir, command + ext.toUpperCase());
+      if (exists(upper)) return upper;
+    }
+  }
+  return null;
 }
 
 function checkConfig() {
@@ -93,6 +109,37 @@ function checkConfig() {
 
   if (config.codex && config.codex.bin && !isPlaceholder(config.codex.bin)) {
     mark(exists(config.codex.bin) ? 'ok' : 'warn', 'codex.bin', config.codex.bin);
+    try {
+      const configuredArgsUsable = Array.isArray(config.codex.args)
+        && config.codex.args.length > 0
+        && !config.codex.args.some(isPlaceholder);
+      const installedCodex = findOnPath('codex');
+      const probeTarget = configuredArgsUsable
+        ? config.codex
+        : installedCodex
+          ? { ...config.codex, bin: installedCodex, args: ['exec', 'resume'] }
+          : config.codex;
+      if (!configuredArgsUsable) {
+        mark('warn', 'codex.args', installedCodex
+          ? 'contains placeholders; capability probe uses Codex found on PATH'
+          : 'contains placeholders and no Codex executable was found on PATH');
+      }
+      const capabilities = probeCodexCapabilities(probeTarget);
+      const adapter = createExecutorAdapter(
+        probeTarget,
+        capabilities,
+        path.join(ROOT, 'schemas', 'executor-result.schema.json'),
+      );
+      mark(capabilities.versionProbeOk ? 'ok' : 'warn', 'Codex version', capabilities.version || 'probe failed');
+      mark(capabilities.execResume ? 'ok' : 'warn', 'exec resume support', String(capabilities.execResume));
+      mark(capabilities.json ? 'ok' : 'warn', '--json support', String(capabilities.json));
+      mark(capabilities.outputSchema ? 'ok' : 'warn', '--output-schema support', String(capabilities.outputSchema));
+      mark(capabilities.appServer ? 'ok' : 'warn', 'app-server support', String(capabilities.appServer));
+      mark('ok', 'selected executor adapter', adapter.name + (adapter.fallbackReason ? `; ${adapter.fallbackReason}` : ''));
+      mark('warn', 'session resolvability', 'not executed by doctor; configured session ids are checked only when a user arms a run');
+    } catch (error) {
+      mark('fail', 'Codex capability probe', error.message);
+    }
   } else {
     mark('warn', 'codex.bin', 'missing or placeholder');
   }
@@ -101,6 +148,10 @@ function checkConfig() {
 function checkProjectFiles() {
   [
     'server.js',
+    'AGENTS.md',
+    'core/job-journal.js',
+    'executors/cli-adapter.js',
+    'schemas/executor-result.schema.json',
     'launch.ps1',
     'chrome-extension/content.js',
     'chrome-extension/background.js',

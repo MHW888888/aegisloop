@@ -20,14 +20,19 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { validateConfig } = require('./config-validation');
+const { createJobJournal } = require('./core/job-journal');
+const { createExecutorAdapter, probeCodexCapabilities } = require('./executors/cli-adapter');
 
 const ROOT = __dirname;
 const CONFIG_PATH = path.join(ROOT, 'config.json');
 const STATE_PATH = path.join(ROOT, 'state.json');
 const STATE_BAK_PATH = STATE_PATH + '.bak';
 const LOG_DIR = path.join(ROOT, 'logs');
+const JOB_DIR = path.join(ROOT, 'jobs');
+const EXECUTOR_SCHEMA_PATH = path.join(ROOT, 'schemas', 'executor-result.schema.json');
 
 fs.mkdirSync(LOG_DIR, { recursive: true });
+fs.mkdirSync(JOB_DIR, { recursive: true });
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
@@ -45,6 +50,9 @@ function loadConfig() {
 }
 
 let CONFIG = loadConfig();
+const CODEX_CAPABILITIES = probeCodexCapabilities(CONFIG.codex);
+const EXECUTOR = createExecutorAdapter(CONFIG.codex, CODEX_CAPABILITIES, EXECUTOR_SCHEMA_PATH);
+const JOB_JOURNAL = createJobJournal(JOB_DIR);
 const PORT = CONFIG.port || 17380;
 const API_TOKEN = String(CONFIG.apiToken || '').trim();
 const ALLOW_NO_TOKEN = process.env.AEGISLOOP_ALLOW_NO_TOKEN === '1';
@@ -160,6 +168,8 @@ function defaultConversation(binding) {
     pendingResult: null,
     blockedPayload: null,
     activeDispatchHash: null,
+    activeJobId: null,
+    recoveryRequired: null,
     lastDispatchAt: 0,
     capsule: buildCapsule(binding),
     updatedAt: Date.now(),
@@ -297,27 +307,52 @@ function loadState() {
     if (!Object.prototype.hasOwnProperty.call(existing, 'armMaxDispatches')) existing.armMaxDispatches = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'armDispatches')) existing.armDispatches = 0;
     if (!Object.prototype.hasOwnProperty.call(existing, 'leaderLease')) existing.leaderLease = null;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'activeJobId')) existing.activeJobId = null;
+    if (!Object.prototype.hasOwnProperty.call(existing, 'recoveryRequired')) existing.recoveryRequired = null;
     ensureHashBuckets(existing);
     ensurePendingResultId(existing);
   }
 }
 
 let saveTimer = null;
+function saveStateNow() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  const tmp = STATE_PATH + '.tmp';
+  if (fs.existsSync(STATE_PATH)) {
+    try { fs.copyFileSync(STATE_PATH, STATE_BAK_PATH); } catch {}
+  }
+  fs.writeFileSync(tmp, JSON.stringify(STATE, null, 2));
+  fs.renameSync(tmp, STATE_PATH);
+}
+
 function saveState() {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
-    saveTimer = null;
-    const tmp = STATE_PATH + '.tmp';
-    if (fs.existsSync(STATE_PATH)) {
-      try { fs.copyFileSync(STATE_PATH, STATE_BAK_PATH); } catch {}
-    }
-    fs.writeFileSync(tmp, JSON.stringify(STATE, null, 2));
-    fs.renameSync(tmp, STATE_PATH);
+    saveStateNow();
   }, 120);
 }
 
 function getConversation(id) {
   return STATE.conversations[id];
+}
+
+function reconcileJobsOnStartup() {
+  const recovered = JOB_JOURNAL.reconcile(STATE.conversations);
+  if (!recovered.length) return recovered;
+  saveStateNow();
+  for (const item of recovered) {
+    audit('_server', {
+      type: 'job_recovery_required',
+      jobId: item.jobId,
+      previousStatus: item.previousStatus,
+      sideEffectsObserved: item.sideEffectsObserved,
+      reason: item.reason,
+    });
+  }
+  return recovered;
 }
 
 function redactString(text) {
@@ -413,6 +448,10 @@ function newArmId() {
 function newTurnNonce() {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   return `aegis-${date}-${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function newJobId() {
+  return 'job_' + crypto.randomBytes(8).toString('hex');
 }
 
 function tokenHash(value) {
@@ -534,6 +573,24 @@ function ensureCapsuleRuntime(conversation) {
     stageNamespaceRequired: capsule.stageNamespaceRequired,
     updatedAt: new Date().toISOString(),
   }, null, 2));
+  fs.writeFileSync(path.join(capsule.allowedWriteRoot, 'AGENTS.md'), [
+    '# AegisLoop Run Capsule',
+    '',
+    `Project: ${capsule.projectId}`,
+    `Active branch: ${capsule.activeBranch}`,
+    `Run: ${capsule.runId}`,
+    `Mode: ${capsule.mode}`,
+    '',
+    '## Execution Rules',
+    '',
+    `- Read the source project from: ${conversation.workspaceDir}`,
+    `- Write new artifacts only under: ${capsule.allowedWriteRoot}`,
+    '- Do not modify the source project or its outputs directory.',
+    '- Do not use frozen branch context as an accepted prerequisite.',
+    '- Run the validation commands named in the execution brief.',
+    '- End with the structured result required by the active executor schema.',
+    '',
+  ].join('\n'), 'utf8');
   return capsule.allowedWriteRoot;
 }
 
@@ -848,16 +905,36 @@ function killProcessTree(child, conversation, jobId) {
   }
 }
 
-function runCodexOnce(conversation, prompt) {
+function runCodexOnce(conversation, prompt, jobId) {
   return new Promise(resolve => {
     const codex = CONFIG.codex;
-    const args = [...codex.args, conversation.codexSessionId, codex.stdinFlag || '-'];
-    const jobId = 'job_' + crypto.randomBytes(6).toString('hex');
+    const args = EXECUTOR.buildArgs(conversation.codexSessionId, codex.stdinFlag || '-');
+    const logicalJobId = jobId || newJobId();
+    const attemptId = 'attempt_' + crypto.randomBytes(6).toString('hex');
     const bufferLimit = CONFIG.outputBufferChars || 1024 * 1024;
     const stdout = createOutputBuffer(bufferLimit);
     const stderr = createOutputBuffer(bufferLimit);
+    let sideEffectRecorded = false;
+    const collector = EXECUTOR.createCollector(() => {
+      if (sideEffectRecorded) return;
+      sideEffectRecorded = true;
+      JOB_JOURNAL.transition(logicalJobId, 'side_effect_started', {
+        sideEffectsObserved: true,
+        sideEffectStartedAt: new Date().toISOString(),
+      });
+    });
     let child;
     let settled = false;
+
+    const journal = JOB_JOURNAL.read(logicalJobId);
+    JOB_JOURNAL.transition(logicalJobId, 'process_started', {
+      adapter: EXECUTOR.name,
+      processStartedAt: new Date().toISOString(),
+      attempts: [...(journal && journal.attempts || []), {
+        attemptId,
+        startedAt: new Date().toISOString(),
+      }],
+    });
 
     function finish(result) {
       if (settled) return;
@@ -867,10 +944,16 @@ function runCodexOnce(conversation, prompt) {
     }
 
     const timer = setTimeout(() => {
-      killProcessTree(child, conversation, jobId);
+      killProcessTree(child, conversation, logicalJobId);
+      JOB_JOURNAL.transition(logicalJobId, 'timed_out', {
+        timedOutAt: new Date().toISOString(),
+        sideEffectsObserved: sideEffectRecorded,
+      });
       finish({
         ok: false,
-        jobId,
+        jobId: logicalJobId,
+        attemptId,
+        adapter: EXECUTOR.name,
         code: 'timeout',
         stdout: stdout.text(),
         stderr: stderr.text() + '\nAegisLoop timeout',
@@ -891,9 +974,16 @@ function runCodexOnce(conversation, prompt) {
         env: process.env,
       });
     } catch (error) {
+      JOB_JOURNAL.transition(logicalJobId, 'failed', {
+        completedAt: new Date().toISOString(),
+        exitCode: 'spawn_exception',
+        sideEffectsObserved: false,
+      });
       finish({
         ok: false,
-        jobId,
+        jobId: logicalJobId,
+        attemptId,
+        adapter: EXECUTOR.name,
         code: 'spawn_exception',
         stdout: stdout.text(),
         stderr: String(error && error.stack || error),
@@ -904,23 +994,62 @@ function runCodexOnce(conversation, prompt) {
       return;
     }
 
-    child.stdout.on('data', chunk => { stdout.append(chunk); });
+    child.stdout.on('data', chunk => {
+      stdout.append(chunk);
+      if (collector) collector.push(chunk);
+    });
     child.stderr.on('data', chunk => { stderr.append(chunk); });
     child.on('error', error => {
       stderr.append('\n' + String(error && error.stack || error));
     });
     child.on('close', code => {
+      if (settled) return;
       const stdoutText = stdout.text();
       const stderrText = stderr.text();
+      const structured = collector ? collector.finish() : null;
+      const schemaInvalid = structured && structured.schemaError;
+      const jsonlInvalid = structured && structured.parseErrors.length > 0;
+      const turnFailed = structured && structured.turnStatus === 'failed';
+      const envelopeFailed = structured && structured.envelope && structured.envelope.status !== 'succeeded';
+      const ok = code === 0 && !schemaInvalid && !jsonlInvalid && !turnFailed && !envelopeFailed;
+      const resultCode = schemaInvalid ? 'schema_invalid'
+        : jsonlInvalid ? 'jsonl_invalid'
+          : turnFailed ? 'turn_failed'
+            : envelopeFailed ? `structured_${structured.envelope.status}`
+              : code;
+      const status = ok ? 'succeeded' : 'failed';
+      JOB_JOURNAL.transition(logicalJobId, status, {
+        completedAt: new Date().toISOString(),
+        exitCode: resultCode,
+        sideEffectsObserved: sideEffectRecorded || !!(structured && structured.sideEffectsObserved),
+        structuredEventCount: structured ? structured.eventCount : 0,
+        structuredParseErrors: structured ? structured.parseErrors : [],
+        schemaError: structured ? structured.schemaError : null,
+        threadId: structured ? structured.threadId : null,
+      });
       finish({
-        ok: code === 0,
-        jobId,
-        code,
+        ok,
+        jobId: logicalJobId,
+        attemptId,
+        adapter: EXECUTOR.name,
+        code: resultCode,
         stdout: stdoutText,
         stderr: stderrText,
         stdoutMeta: stdout.meta(),
         stderrMeta: stderr.meta(),
-        errorClass: code === 0 ? null : classifyFailure(code, stderrText, stdoutText),
+        errorClass: ok ? null : classifyFailure(resultCode, stderrText, stdoutText),
+        finalMessage: structured && structured.envelope
+          ? JSON.stringify(structured.envelope, null, 2)
+          : null,
+        envelope: structured ? structured.envelope : null,
+        structuredMeta: structured ? {
+          eventCount: structured.eventCount,
+          parseErrorCount: structured.parseErrors.length,
+          sideEffectsObserved: structured.sideEffectsObserved,
+          threadId: structured.threadId,
+          turnStatus: structured.turnStatus,
+          schemaError: structured.schemaError,
+        } : null,
       });
     });
 
@@ -1095,8 +1224,19 @@ function prepareDispatch(conversation, prompt, auth) {
 
   rememberHash(conversation, 'attemptedHashes', hash);
   const usedTurnTokenHash = tokenHash(providedTurnNonce);
+  const jobId = newJobId();
+  JOB_JOURNAL.create({
+    jobId,
+    conversationId: conversation.conversationId,
+    promptHash: hash,
+    adapter: EXECUTOR.name,
+    acceptedAt: new Date().toISOString(),
+    turn: (conversation.turn || 0) + 1,
+  });
   markTurnNonceUsed(conversation, providedTurnNonce);
   conversation.activeDispatchHash = hash;
+  conversation.activeJobId = jobId;
+  conversation.recoveryRequired = null;
   conversation.armDispatches = (conversation.armDispatches || 0) + 1;
   if (remainingDispatches(conversation) > 0 && Date.now() <= conversation.armExpiresAt) {
     rotateTurnNonce(conversation);
@@ -1105,18 +1245,19 @@ function prepareDispatch(conversation, prompt, auth) {
     conversation.armNonce = null;
   }
   conversation.conversationMode = 'running';
-  saveState();
+  saveStateNow();
   ensureCapsuleRuntime(conversation);
   return {
     status: 'accepted',
     hash,
+    jobId,
     prompt: effectivePrompt,
     usedTurnTokenHash,
     ...currentArmPayload(conversation),
   };
 }
 
-async function runDispatchAsync(conversation, prompt, hash) {
+async function runDispatchAsync(conversation, prompt, hash, jobId) {
   try {
     const minGap = CONFIG.minIntervalMs || 0;
     const since = Date.now() - (conversation.lastDispatchAt || 0);
@@ -1135,20 +1276,16 @@ async function runDispatchAsync(conversation, prompt, hash) {
       capsule: conversation.capsule || null,
     });
 
-    const result = await withWorkspaceLock(lockDirForConversation(conversation), async () => {
-      let first = await runCodexOnce(conversation, prompt);
-      if (!first.ok && first.errorClass === 'infra') {
-        audit(conversation.conversationId, { type: 'codex_retry_infra', turn, code: first.code });
-        first = await runCodexOnce(conversation, prompt);
-      }
-      return first;
-    });
+    const result = await withWorkspaceLock(
+      lockDirForConversation(conversation),
+      () => runCodexOnce(conversation, prompt, jobId),
+    );
 
     conversation.lastJobId = result.jobId;
 
     if (result.ok) {
       conversation.consecutiveFailures = 0;
-      const finalMessage = extractFinal(result.stdout);
+      const finalMessage = result.finalMessage || extractFinal(result.stdout);
       conversation.pendingResult = {
         turn,
         jobId: result.jobId,
@@ -1161,6 +1298,11 @@ async function runDispatchAsync(conversation, prompt, hash) {
         at: Date.now(),
       };
       ensurePendingResultId(conversation);
+      JOB_JOURNAL.transition(jobId, 'result_pending', {
+        outcomeStatus: 'succeeded',
+        resultId: conversation.pendingResult.resultId,
+        resultPendingAt: new Date().toISOString(),
+      });
       audit(conversation.conversationId, {
         type: 'codex_done',
         turn,
@@ -1176,7 +1318,7 @@ async function runDispatchAsync(conversation, prompt, hash) {
     conversation.consecutiveFailures += 1;
     const failMessage = [
       `[Codex execution failed code=${result.code}]`,
-      extractFinal(result.stdout),
+      result.finalMessage || extractFinal(result.stdout),
       '--- stderr ---',
       String(result.stderr || '').slice(-2000),
     ].join('\n');
@@ -1193,6 +1335,11 @@ async function runDispatchAsync(conversation, prompt, hash) {
       at: Date.now(),
     };
     ensurePendingResultId(conversation);
+    JOB_JOURNAL.transition(jobId, 'result_pending', {
+      outcomeStatus: result.code === 'timeout' ? 'timed_out' : 'failed',
+      resultId: conversation.pendingResult.resultId,
+      resultPendingAt: new Date().toISOString(),
+    });
     audit(conversation.conversationId, {
       type: 'codex_failed',
       turn,
@@ -1213,10 +1360,26 @@ async function runDispatchAsync(conversation, prompt, hash) {
       });
       notify(`conversation ${conversation.conversationId.slice(0, 8)} paused by failure breaker`);
     }
+  } catch (error) {
+    const recovery = {
+      jobId,
+      reason: 'dispatch_interrupted',
+      at: new Date().toISOString(),
+    };
+    JOB_JOURNAL.transition(jobId, 'recovery_required', recovery);
+    conversation.recoveryRequired = recovery;
+    conversation.loopState = 'paused';
+    conversation.pauseReason = 'recovery_required';
+    audit(conversation.conversationId, {
+      type: 'dispatch_recovery_required',
+      jobId,
+      error: String(error && error.stack || error),
+    });
   } finally {
     if (conversation.activeDispatchHash === hash) conversation.activeDispatchHash = null;
+    if (conversation.activeJobId === jobId) conversation.activeJobId = null;
     conversation.updatedAt = Date.now();
-    saveState();
+    saveStateNow();
   }
 }
 
@@ -1233,49 +1396,85 @@ async function forceExecute(conversation, prompt) {
 
   const effectivePrompt = decoratePrompt(conversation, prompt);
   const hash = hashPayload(effectivePrompt);
+  const jobId = newJobId();
+  JOB_JOURNAL.create({
+    jobId,
+    conversationId: conversation.conversationId,
+    promptHash: hash,
+    adapter: EXECUTOR.name,
+    acceptedAt: new Date().toISOString(),
+    forced: true,
+    turn: (conversation.turn || 0) + 1,
+  });
   conversation.activeDispatchHash = hash;
+  conversation.activeJobId = jobId;
+  conversation.recoveryRequired = null;
   rememberHash(conversation, 'attemptedHashes', hash);
   conversation.updatedAt = Date.now();
-  saveState();
+  saveStateNow();
 
   conversation.turn += 1;
   const turn = conversation.turn;
   audit(conversation.conversationId, { type: 'forced_dispatch', turn, hash, capsule: conversation.capsule || null });
 
-  const result = await withWorkspaceLock(lockDirForConversation(conversation), async () => {
-    let first = await runCodexOnce(conversation, effectivePrompt);
-    if (!first.ok && first.errorClass === 'infra') first = await runCodexOnce(conversation, effectivePrompt);
-    return first;
-  });
+  try {
+    const result = await withWorkspaceLock(
+      lockDirForConversation(conversation),
+      () => runCodexOnce(conversation, effectivePrompt, jobId),
+    );
 
-  conversation.lastJobId = result.jobId;
-  conversation.consecutiveFailures = result.ok ? 0 : conversation.consecutiveFailures + 1;
-  conversation.pendingResult = {
-    turn,
-    jobId: result.jobId,
-    hash,
-    ok: result.ok,
-    finalMessage: result.ok
-      ? extractFinal(result.stdout)
-      : `[Codex execution failed code=${result.code}]\n${String(result.stderr || '').slice(-2000)}`,
-    stdoutMeta: result.stdoutMeta || null,
-    stderrMeta: result.stderrMeta || null,
-    consumed: false,
-    at: Date.now(),
-  };
-  ensurePendingResultId(conversation);
-  if (conversation.activeDispatchHash === hash) conversation.activeDispatchHash = null;
-  conversation.updatedAt = Date.now();
-  saveState();
-  audit(conversation.conversationId, {
-    type: result.ok ? 'codex_done' : 'codex_failed',
-    turn,
-    jobId: result.jobId,
-    code: result.code,
-    stdoutMeta: result.stdoutMeta || null,
-    stderrMeta: result.stderrMeta || null,
-  });
-  return { ok: true, status: 'accepted', hash };
+    conversation.lastJobId = result.jobId;
+    conversation.consecutiveFailures = result.ok ? 0 : conversation.consecutiveFailures + 1;
+    conversation.pendingResult = {
+      turn,
+      jobId: result.jobId,
+      hash,
+      ok: result.ok,
+      finalMessage: result.ok
+        ? result.finalMessage || extractFinal(result.stdout)
+        : `[Codex execution failed code=${result.code}]\n${String(result.stderr || '').slice(-2000)}`,
+      stdoutMeta: result.stdoutMeta || null,
+      stderrMeta: result.stderrMeta || null,
+      consumed: false,
+      at: Date.now(),
+    };
+    ensurePendingResultId(conversation);
+    JOB_JOURNAL.transition(jobId, 'result_pending', {
+      outcomeStatus: result.ok ? 'succeeded' : result.code === 'timeout' ? 'timed_out' : 'failed',
+      resultId: conversation.pendingResult.resultId,
+      resultPendingAt: new Date().toISOString(),
+    });
+    audit(conversation.conversationId, {
+      type: result.ok ? 'codex_done' : 'codex_failed',
+      turn,
+      jobId: result.jobId,
+      code: result.code,
+      stdoutMeta: result.stdoutMeta || null,
+      stderrMeta: result.stderrMeta || null,
+    });
+    return { ok: true, status: 'accepted', hash };
+  } catch (error) {
+    const recovery = {
+      jobId,
+      reason: 'force_execute_interrupted',
+      at: new Date().toISOString(),
+    };
+    JOB_JOURNAL.transition(jobId, 'recovery_required', recovery);
+    conversation.recoveryRequired = recovery;
+    conversation.loopState = 'paused';
+    conversation.pauseReason = 'recovery_required';
+    audit(conversation.conversationId, {
+      type: 'force_execute_recovery_required',
+      jobId,
+      error: String(error && error.stack || error),
+    });
+    return { ok: false, status: 'recovery_required', hash, jobId };
+  } finally {
+    if (conversation.activeDispatchHash === hash) conversation.activeDispatchHash = null;
+    if (conversation.activeJobId === jobId) conversation.activeJobId = null;
+    conversation.updatedAt = Date.now();
+    saveStateNow();
+  }
 }
 
 function sendJson(response, code, object) {
@@ -1437,7 +1636,7 @@ const server = http.createServer(async (request, response) => {
         codeBlockHash: body.codeBlockHash,
       });
       if (prepared.status === 'accepted') {
-        runDispatchAsync(conversation, prepared.prompt, prepared.hash);
+        runDispatchAsync(conversation, prepared.prompt, prepared.hash, prepared.jobId);
       }
       return sendJson(response, 200, prepared);
     }
@@ -1517,6 +1716,8 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === '/api/result' && request.method === 'GET') {
       const conversation = getConversation(url.searchParams.get('conversationId'));
       if (!conversation) return sendJson(response, 404, { error: 'unknown conversation' });
+      const leaderError = requireLeader(conversation, url.searchParams.get('clientId'));
+      if (leaderError) return sendJson(response, 409, leaderError);
 
       if (conversation.pendingResult && !conversation.pendingResult.consumed) {
         const result = conversation.pendingResult;
@@ -1585,6 +1786,10 @@ const server = http.createServer(async (request, response) => {
       }
       rememberHash(conversation, 'ackedResultIds', pendingResultId, 1000);
       conversation.pendingResult.consumed = true;
+      JOB_JOURNAL.transition(ackedResult.jobId, 'acked', {
+        ackedAt: new Date().toISOString(),
+        resultId: pendingResultId,
+      });
       if (remainingDispatches(conversation) > 0 && conversation.turnNonce && Date.now() <= conversation.armExpiresAt) {
         conversation.conversationMode = 'review';
         conversation.loopState = 'running';
@@ -1641,6 +1846,10 @@ const server = http.createServer(async (request, response) => {
 
       conversation.loopState = 'paused';
       conversation.pauseReason = body.reason || 'result_not_acknowledged';
+      JOB_JOURNAL.transition(conversation.pendingResult.jobId, 'recovery_required', {
+        recoveryReason: conversation.pauseReason,
+        resultId: pendingResultId,
+      });
       ensureHashBuckets(conversation);
       if (conversation.pendingResult.hash) rememberHash(conversation, 'failedHashes', conversation.pendingResult.hash);
       conversation.updatedAt = Date.now();
@@ -1759,6 +1968,7 @@ const server = http.createServer(async (request, response) => {
 });
 
 loadState();
+const RECOVERED_JOBS = reconcileJobsOnStartup();
 
 server.on('error', error => {
   if (error.code === 'EADDRINUSE') {
@@ -1771,6 +1981,9 @@ server.on('error', error => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`[bridge] AegisLoop listening on http://127.0.0.1:${PORT} (contract ${CONFIG.contractVersion})`);
+  console.log(`[bridge] Codex executor: ${EXECUTOR.name} (${CODEX_CAPABILITIES.version || 'version unknown'})`);
+  if (EXECUTOR.fallbackReason) console.warn(`[bridge] executor fallback: ${EXECUTOR.fallbackReason}`);
+  if (RECOVERED_JOBS.length) console.warn(`[bridge] recovery required for ${RECOVERED_JOBS.length} interrupted job(s)`);
   console.log(`[bridge] conversations: ${Object.keys(STATE.conversations).join(', ') || '(none)'}`);
 });
 

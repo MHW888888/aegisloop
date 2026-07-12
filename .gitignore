@@ -2,6 +2,7 @@ config.json
 state.json
 state.json.tmp
 logs/
+jobs/
 data/
 workspaces/
 backup-before-*/

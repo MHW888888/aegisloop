@@ -44,19 +44,25 @@ Version `v0.2.0` focuses on first-run clarity:
 
 The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
 
-## Current Focus: v0.3.17 Codex Coexistence
+## Current Focus: v0.3.18 Structured Executor & Crash Recovery
 
-Version `v0.3.17` makes the execution route explicit now that ChatGPT can also offer built-in Codex:
+Version `v0.3.18` moves AegisLoop from plain-text process wrapping toward a recoverable Codex control layer:
 
-- the panel shows `Execution route: AegisLoop local bridge`;
-- runner prompts tell models not to start ChatGPT built-in Codex for an AegisLoop turn;
-- GPT-5.6 Sol, Terra, and Luna are included as real-account smoke targets without claiming unverified support;
-- the new [Codex coexistence guide](docs/codex-coexistence.md) explains when to use built-in Codex and when AegisLoop is useful.
+- the preferred CLI adapter uses `codex exec resume --json --output-schema` and validates a stable result envelope;
+- capability detection selects the structured adapter before execution, with a legacy adapter only for older compatible CLIs;
+- every accepted execution gets a persistent local job journal;
+- bridge restarts turn interrupted work into `recovery_required` instead of leaving a permanent busy lock or replaying the task;
+- infrastructure failures are no longer retried blindly after possible file, command, or MCP side effects;
+- result reads now require the same tab leader lease as dispatch and ACK/NACK;
+- root and Run Capsule `AGENTS.md` files keep durable execution rules close to Codex;
+- `npm run doctor` reports Codex version, structured CLI flags, App Server availability, and the selected adapter.
+
+The [Codex coexistence guide](docs/codex-coexistence.md) still explains when to use built-in Codex and when AegisLoop is useful. The next architecture step is an App Server policy proxy, not more prompt-only routing; see [the App Server roadmap](docs/app-server-roadmap.md).
 
 The existing v0.3 hardening foundation includes:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
-- Windows and macOS CI checks for the local setup scripts and core bridge tests;
+- Windows, macOS, and Linux CI checks for the core bridge, unit, and recovery fixtures;
 - optional `X-AegisLoop-Token` auth for all `/api/*` bridge calls;
 - explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
 - clearer package, extension, and protocol version reporting;
@@ -195,6 +201,7 @@ Edit `config.json`:
 - `codexSessionId`: local Codex session id to resume.
 - `workspaceDir`: local workspace for that session.
 - `codex.bin` / `codex.args`: Node.js and Codex CLI paths.
+- `codex.executorAdapter`: `auto` (recommended), `cli-json`, or `legacy`. `auto` selects structured JSONL only when capability probing succeeds before a job starts.
 - `apiToken`: recommended for normal use. Without it, `/api/*` is blocked unless you explicitly start the bridge with `AEGISLOOP_ALLOW_NO_TOKEN=1` for a throwaway local test.
 - optional `allowedOrigins`: extra trusted browser origins for `/api/*`; by default AegisLoop allows ChatGPT origins, Chrome extension origins, and no-origin local CLI requests.
 
@@ -279,7 +286,7 @@ For parallel research runs, Run Capsules can also block ambiguous stage labels u
 
 Codex results use an explicit ACK flow:
 
-- `GET /api/result` returns a pending result without consuming it.
+- `GET /api/result` returns a pending result without consuming it and requires the active tab leader lease.
 - `POST /api/result/ack` marks it consumed only after the extension confirms ChatGPT received the result. ACK includes `resultId`, so repeated ACKs are safe.
 - `POST /api/result/nack` keeps it pending and pauses the loop when insertion fails.
 
@@ -337,6 +344,7 @@ These files are local runtime state and are ignored by git:
 - Browser compatibility: [docs/browser-compatibility.md](docs/browser-compatibility.md)
 - Model compatibility: [docs/model-compatibility.md](docs/model-compatibility.md)
 - Codex coexistence / 与内置 Codex 共存: [docs/codex-coexistence.md](docs/codex-coexistence.md)
+- Codex App Server roadmap: [docs/app-server-roadmap.md](docs/app-server-roadmap.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Parallel Safe Mode: [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md)
 - Dual Briefing / 双端初始化: [docs/dual-briefing.md](docs/dual-briefing.md)
@@ -356,6 +364,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.15 release notes: [docs/release-notes-v0.3.15.md](docs/release-notes-v0.3.15.md)
 - v0.3.16 release notes: [docs/release-notes-v0.3.16.md](docs/release-notes-v0.3.16.md)
 - v0.3.17 release notes: [docs/release-notes-v0.3.17.md](docs/release-notes-v0.3.17.md)
+- v0.3.18 release notes: [docs/release-notes-v0.3.18.md](docs/release-notes-v0.3.18.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Promotion playbook: [docs/promotion-playbook.md](docs/promotion-playbook.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)
