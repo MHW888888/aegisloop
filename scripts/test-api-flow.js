@@ -74,6 +74,7 @@ async function main() {
   const clientId = 'client-api-flow-1';
   const otherClientId = 'client-api-flow-2';
   const conversationId = '11111111-1111-4111-8111-111111111111';
+  const unsafeConversationId = '22222222-2222-4222-8222-222222222222';
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'aegisloop-api-flow-'));
   const repo = path.join(parent, 'repo');
   const workspaceDir = path.join(parent, 'workspace');
@@ -126,6 +127,24 @@ async function main() {
         mode: 'readonly',
         stageNamespaceRequired: true,
         forbiddenBranchContext: ['Ziwei V2.4F'],
+      },
+    }, {
+      conversationId: unsafeConversationId,
+      codexSessionId: 'unsafe-test-session',
+      workspaceDir,
+      fullAuto: true,
+      conversationMode: 'chat',
+      capsule: {
+        enabled: true,
+        projectId: 'UnsafeRootTest',
+        activeBranch: 'UNSAFE-ROOT',
+        branchMeaning: 'write-root boundary regression',
+        runId: 'run-unsafe-root',
+        mode: 'readonly',
+        runtimeRoot,
+        allowedWriteRoot: path.join(parent, 'outside-runtime'),
+        stageNamespaceRequired: true,
+        forbiddenBranchContext: [],
       },
     }],
     codex: {
@@ -204,6 +223,21 @@ async function main() {
       },
     });
     assert.strictEqual(extensionOrigin.status, 200);
+
+    const unsafeArm = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId: unsafeConversationId, clientId, action: 'arm_once' }),
+    });
+    assert.strictEqual(unsafeArm.status, 200);
+    const unsafeDispatch = await fetchJson(`${base}/api/dispatch`, {
+      method: 'POST',
+      headers,
+      body: dispatchBody(unsafeConversationId, clientId, unsafeArm.json, 'Execute UNSAFE-ROOT boundary test'),
+    });
+    assert.strictEqual(unsafeDispatch.status, 200);
+    assert.strictEqual(unsafeDispatch.json.status, 'blocked');
+    assert.strictEqual(unsafeDispatch.json.rule, 'capsule_write_root_outside_runtime');
 
     const initialDispatch = await fetchJson(`${base}/api/dispatch`, {
       method: 'POST',
