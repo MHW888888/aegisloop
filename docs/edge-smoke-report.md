@@ -3,7 +3,7 @@
 ## Environment
 
 - OS: Windows 11
-- Browser: Microsoft Edge (add the version from `edge://settings/help`)
+- Browser: Microsoft Edge (version not recorded)
 - ChatGPT UI language: English
 - AegisLoop version: 0.3.16
 - Model mode tested: Chat
