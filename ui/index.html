@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AegisLoop Console</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">AegisLoop local control</div>
+        <h1>Workspace Console</h1>
+      </div>
+      <div class="status-strip" aria-live="polite">
+        <span id="bridgeStatus" class="pill neutral">Checking bridge</span>
+        <span id="runStatus" class="pill neutral">Idle</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="workspace-panel" aria-label="Workspace and task controls">
+        <div class="section-head">
+          <h2>Workspace</h2>
+          <button id="refreshBtn" class="icon-button" type="button" aria-label="Refresh status" title="Refresh status">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6"/></svg>
+          </button>
+        </div>
+
+        <label class="field">
+          <span>Conversation</span>
+          <select id="conversationSelect"></select>
+        </label>
+
+        <div class="meta-grid">
+          <div>
+            <span class="meta-label">Mode</span>
+            <strong id="modeText">-</strong>
+          </div>
+          <div>
+            <span class="meta-label">Turn</span>
+            <strong id="turnText">-</strong>
+          </div>
+          <div>
+            <span class="meta-label">Pending</span>
+            <strong id="pendingText">-</strong>
+          </div>
+          <div>
+            <span class="meta-label">Last job</span>
+            <strong id="jobText">-</strong>
+          </div>
+        </div>
+
+        <div class="path-box" id="workspacePath">No workspace selected</div>
+
+        <div class="section-head task-head">
+          <h2>Task</h2>
+        </div>
+
+        <div class="template-list" role="group" aria-label="Task templates">
+          <button class="template is-active" type="button" data-template="audit">
+            <span>Inspect workspace</span>
+            <small>Read-only project summary</small>
+          </button>
+          <button class="template" type="button" data-template="plan">
+            <span>Plan next steps</span>
+            <small>Prioritized task route</small>
+          </button>
+          <button class="template" type="button" data-template="patch">
+            <span>One safe change</span>
+            <small>Small reversible edit</small>
+          </button>
+          <button class="template" type="button" data-template="custom">
+            <span>Custom</span>
+            <small>Write your own task</small>
+          </button>
+        </div>
+
+        <label class="toggle-row">
+          <input id="allowEdits" type="checkbox">
+          <span>Allow file edits for this run</span>
+        </label>
+
+        <label class="field prompt-field">
+          <span>Codex task</span>
+          <textarea id="promptInput" spellcheck="false"></textarea>
+        </label>
+
+        <div class="run-bar">
+          <label class="field loop-field compact-field">
+            <span>Loop runs</span>
+            <input id="loopCount" type="number" min="1" step="1" value="3">
+          </label>
+
+          <div class="actions">
+            <button id="runBtn" class="primary" type="button">
+              <span class="button-label">Run once</span>
+            </button>
+            <button id="runLoopBtn" class="primary subtle" type="button">
+              <span class="button-label">Run loop</span>
+            </button>
+            <button id="pauseBtn" class="secondary" type="button">Pause</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="result-panel" aria-label="Run output">
+        <div class="section-head">
+          <div>
+            <h2>Run Result</h2>
+            <p id="resultSubhead">No run started from this page yet.</p>
+          </div>
+          <button id="copyBtn" class="secondary compact" type="button">Copy</button>
+        </div>
+
+        <div class="progress" aria-hidden="true">
+          <div id="progressBar"></div>
+        </div>
+
+        <pre id="resultOutput" class="result-output">Ready. Choose a task, then run once or run a limited loop.</pre>
+
+        <div class="section-head log-head">
+          <h2>Activity</h2>
+          <button id="clearLogBtn" class="secondary compact" type="button">Clear</button>
+        </div>
+        <ol id="activityLog" class="activity-log"></ol>
+      </section>
+    </main>
+  </div>
+
+  <script src="/ui/config.js"></script>
+  <script src="/ui/app.js"></script>
+</body>
+</html>

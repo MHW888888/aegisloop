@@ -155,9 +155,9 @@ If you want the shortest safe path, start with the [3-minute Quickstart Card](do
 The short path:
 
 1. Start the local bridge.
-2. Open a ChatGPT conversation.
-3. Keep the thread in **Chat Mode** until you are ready.
-4. Click **Arm one run** for one safe dispatch, or **Arm loop** for a bounded loop.
+2. Open the local web UI at `http://127.0.0.1:17380/ui/`, or open a ChatGPT conversation with the extension.
+3. Keep the route in **Chat Mode** until you are ready.
+4. In the local UI, use **Run once** for one safe dispatch or **Run loop** for a bounded loop. In the extension, use **Arm one run** or **Arm loop**.
 
 For a harmless first run, point `workspaceDir` at [examples/sample-workspace](examples/sample-workspace). It contains only tiny editable text files, no dependencies, no external services, and no secrets.
 
@@ -186,6 +186,7 @@ cd aegisloop
 
 ```powershell
 Copy-Item .\config.example.json .\config.json
+npm run init:local
 npm run doctor
 ```
 
@@ -216,7 +217,23 @@ Save the same `apiToken` in the extension panel when prompted.
 
 If you change the bridge port from the default `17380`, also update **Local bridge URL** in the extension panel, for example `http://127.0.0.1:17400`.
 
-### 4. Load The Chrome Extension
+### 4. Open The Local Web UI
+
+The local web UI avoids the ChatGPT nonce-block path and talks directly to the local bridge:
+
+```text
+http://127.0.0.1:17380/ui/
+```
+
+or:
+
+```powershell
+npm run open:ui
+```
+
+Use **Inspect workspace** for a read-only first task. Use **Run once** until the workspace route is proven. Use **Run loop** only with a small finite loop count and a clear stop condition.
+
+### 5. Load The Chrome Extension
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
@@ -224,7 +241,7 @@ If you change the bridge port from the default `17380`, also update **Local brid
 4. Select `chrome-extension/`.
 5. Open the bound ChatGPT conversation and press `Ctrl+F5`.
 
-### 5. Run
+### 6. Run
 
 If the page already contains a valid `codex` block, click:
 

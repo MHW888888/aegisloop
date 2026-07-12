@@ -61,6 +61,12 @@ else
   ok "created config.json from config.example.json"
 fi
 
+if have node; then
+  node scripts/init-local-config.js
+else
+  warn "Skipped local config initialization because node is missing."
+fi
+
 printf '\n'
 printf 'Running AegisLoop doctor...\n'
 if have npm; then
@@ -75,7 +81,8 @@ printf '1. Edit config.json and replace YOUR_CHATGPT_CONVERSATION_ID, YOUR_CODEX
 printf '2. Find Node with: which node\n'
 printf '3. If Codex is global, find npm root with: npm root -g\n'
 printf '4. Start the bridge with: npm start\n'
-printf '5. Open Chrome -> chrome://extensions -> Developer mode -> Load unpacked -> chrome-extension/\n'
-printf '6. Keep the ChatGPT thread in Chat Mode, then try Arm one run first.\n'
+printf '5. Open the local web UI: http://127.0.0.1:17380/ui/ or run: npm run open:ui\n'
+printf '6. Optional browser loop: Chrome -> chrome://extensions -> Developer mode -> Load unpacked -> chrome-extension/\n'
+printf '7. Keep the ChatGPT thread in Chat Mode, then try Arm one run first.\n'
 printf '\n'
 printf 'For details, see docs/macos.md\n'
