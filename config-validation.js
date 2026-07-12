@@ -112,6 +112,11 @@ function validateConfig(config) {
   assertStringArray(config.codex.args, 'codex.args');
   assertString(config.codex.stdinFlag, 'codex.stdinFlag', { optional: true });
   assertInteger(config.codex.timeoutMs, 'codex.timeoutMs', { optional: true, min: 1 });
+  assertString(config.codex.executorAdapter, 'codex.executorAdapter', { optional: true });
+  if (config.codex.executorAdapter !== undefined
+    && !['auto', 'cli-json', 'legacy'].includes(config.codex.executorAdapter)) {
+    throw configError('codex.executorAdapter must be one of: auto, cli-json, legacy');
+  }
 
   if (config.breaker !== undefined) {
     if (!isPlainObject(config.breaker)) throw configError('breaker must be an object');

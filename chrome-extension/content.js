@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.17';
+  const CONTENT_VERSION = '0.3.18';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -920,7 +920,8 @@
 
       // Waiting for a Codex result.
       if (LE.local === 'dispatching') {
-        const rr = await bridge('/api/result?conversationId=' + encodeURIComponent(LE.conversationId), 'GET');
+        const rr = await bridge('/api/result?conversationId=' + encodeURIComponent(LE.conversationId)
+          + '&clientId=' + encodeURIComponent(LE.clientId), 'GET');
         if (rr.ok && rr.json.hasResult) {
           const result = rr.json.result;
           const resultId = result.resultId || null;

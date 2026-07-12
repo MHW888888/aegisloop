@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AegisLoop executor result",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "blocked"]
+    },
+    "summary": { "type": "string" },
+    "files_changed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "commands_run": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "not_run"]
+          }
+        },
+        "required": ["command", "status"],
+        "additionalProperties": false
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "next_candidate": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "status",
+    "summary",
+    "files_changed",
+    "commands_run",
+    "tests",
+    "risks",
+    "next_candidate"
+  ],
+  "additionalProperties": false
+}

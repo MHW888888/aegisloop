@@ -32,6 +32,7 @@
     }
   ],
   "codex": {
+    "executorAdapter": "auto",
     "bin": "C:\\Program Files\\nodejs\\node.exe",
     "args": [
       "C:\\Users\\YOUR_USER\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js",

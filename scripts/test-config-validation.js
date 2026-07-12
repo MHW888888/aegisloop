@@ -48,6 +48,12 @@ assert.strictEqual(validateConfig(example), true);
 
 {
   const config = clone(example);
+  config.codex.executorAdapter = 'guess';
+  expectInvalid(config, /executorAdapter must be one of/);
+}
+
+{
+  const config = clone(example);
   config.bindings[0].capsule.forbiddenBranchContext = 'V1-OTHER';
   expectInvalid(config, /forbiddenBranchContext must be an array of strings/);
 }
