@@ -5,11 +5,11 @@
 [![Local-first](https://img.shields.io/badge/local--first-yes-blue)](#safety-model)
 [![Guarded autonomy](https://img.shields.io/badge/guarded-autonomy-purple)](#why-aegisloop)
 
-> **Let ChatGPT plan a coding task while your local Codex executes it safely, one step at a time.**
+> **A guarded control plane for explicit ChatGPT-to-local-Codex execution.**
 
-AegisLoop connects a ChatGPT web conversation to a local Codex session. ChatGPT decides the next step, Codex runs it in your workspace, and AegisLoop carries the result back with local safety gates, workspace locks, dedupe, and audit logs.
+AegisLoop binds one ChatGPT conversation to one local Codex session. ChatGPT produces a visible next-step instruction, Codex runs it in your workspace, and AegisLoop carries the result back through explicit arming, workspace locks, recoverable delivery, and audit logs.
 
-It is for people who want useful agentic loops without handing the steering wheel to an unbounded web chat.
+Codex is now available directly in ChatGPT, the desktop app, editors, and the terminal. AegisLoop does not replace those surfaces. It is for users who specifically want a browser-thread-driven local loop with an inspectable execution route and local fail-closed controls.
 
 > AegisLoop is a personal automation bridge. It is not an official OpenAI product.
 
@@ -44,9 +44,16 @@ Version `v0.2.0` focuses on first-run clarity:
 
 The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
 
-## Current Focus: v0.3.x Hardening
+## Current Focus: v0.3.17 Codex Coexistence
 
-Version `v0.3.16` makes the first run easier to understand and keeps the browser-to-bridge loop more resilient on top of the v0.3 Parallel Safe Mode foundation:
+Version `v0.3.17` makes the execution route explicit now that ChatGPT can also offer built-in Codex:
+
+- the panel shows `Execution route: AegisLoop local bridge`;
+- runner prompts tell models not to start ChatGPT built-in Codex for an AegisLoop turn;
+- GPT-5.6 Sol, Terra, and Luna are included as real-account smoke targets without claiming unverified support;
+- the new [Codex coexistence guide](docs/codex-coexistence.md) explains when to use built-in Codex and when AegisLoop is useful.
+
+The existing v0.3 hardening foundation includes:
 
 - startup config schema validation, so bad `config.json` values fail fast with clear errors;
 - Windows and macOS CI checks for the local setup scripts and core bridge tests;
@@ -98,6 +105,17 @@ ChatGPT is good at planning, critique, and next-step design. Codex is good at re
 
 The important part is not the loop itself. The important part is the **aegis** around it: gates, locks, dedupe, and logs.
 
+### Why use it when Codex is already in ChatGPT?
+
+Use built-in Codex when its native task, worktree, cloud, editor, or terminal workflow already fits. Use AegisLoop when you specifically need:
+
+- a dedicated ChatGPT runner thread bound to an existing local Codex session;
+- an explicit `Chat Mode -> Arm one run -> result ACK` lifecycle;
+- local Run Capsules and workspace serialization across long browser-planned workflows;
+- a visible, exportable route state for debugging duplicate tabs, stale turns, or failed result delivery.
+
+The two routes can coexist, but one turn should use one route. See [Codex coexistence](docs/codex-coexistence.md).
+
 ## Who It Is For
 
 | You are... | AegisLoop helps by... |
@@ -123,7 +141,8 @@ The important part is not the loop itself. The important part is the **aegis** a
 
 | Tool | Main focus | AegisLoop difference |
 | --- | --- | --- |
-| Codex CLI | Local coding agent | AegisLoop keeps ChatGPT as planner and Codex as executor. |
+| Codex in ChatGPT | Native Codex command center with built-in agent workflows | AegisLoop adds an explicit browser-thread-to-existing-local-session route with local arming, capsules, and ACK/NACK delivery. |
+| Codex CLI | Terminal-first local coding agent | AegisLoop can resume a bound CLI session from a dedicated ChatGPT runner thread. |
 | Aider | Git-native pair programming | AegisLoop focuses on browser-to-local loop orchestration. |
 | OpenHands | Full agent platform | AegisLoop is smaller, local-first, and ChatGPT-page driven. |
 | Nanobrowser | Browser automation | AegisLoop targets coding loops, not general web automation. |
@@ -154,7 +173,7 @@ npm start
 
 For OS / browser / model compatibility, start with [docs/compatibility-matrix.md](docs/compatibility-matrix.md). For browser support beyond Chrome, see [docs/browser-compatibility.md](docs/browser-compatibility.md). Chrome is the primary target, Edge is the next recommended compatibility target, and Firefox/Tor should be treated as experimental until separately packaged and tested.
 
-If a ChatGPT Pro or reasoning model says it cannot find the tool, see [docs/model-compatibility.md](docs/model-compatibility.md). AegisLoop does not use a built-in ChatGPT tool call; it reads a fenced `codex` JSON block from the page.
+If GPT-5.6, a Pro mode, or another reasoning model starts built-in Codex or says it cannot find the tool, see [model compatibility](docs/model-compatibility.md) and [Codex coexistence](docs/codex-coexistence.md). An AegisLoop turn does not use a built-in ChatGPT tool call; it reads a fenced `codex` JSON block from the page.
 
 ### 1. Clone
 
@@ -317,6 +336,7 @@ These files are local runtime state and are ignored by git:
 - Compatibility matrix: [docs/compatibility-matrix.md](docs/compatibility-matrix.md)
 - Browser compatibility: [docs/browser-compatibility.md](docs/browser-compatibility.md)
 - Model compatibility: [docs/model-compatibility.md](docs/model-compatibility.md)
+- Codex coexistence / 与内置 Codex 共存: [docs/codex-coexistence.md](docs/codex-coexistence.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Parallel Safe Mode: [docs/parallel-safe-mode.md](docs/parallel-safe-mode.md)
 - Dual Briefing / 双端初始化: [docs/dual-briefing.md](docs/dual-briefing.md)
@@ -335,6 +355,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.14 release notes: [docs/release-notes-v0.3.14.md](docs/release-notes-v0.3.14.md)
 - v0.3.15 release notes: [docs/release-notes-v0.3.15.md](docs/release-notes-v0.3.15.md)
 - v0.3.16 release notes: [docs/release-notes-v0.3.16.md](docs/release-notes-v0.3.16.md)
+- v0.3.17 release notes: [docs/release-notes-v0.3.17.md](docs/release-notes-v0.3.17.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Promotion playbook: [docs/promotion-playbook.md](docs/promotion-playbook.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)

@@ -17,7 +17,7 @@ $labelSpecs = @{
   "10-minute-test" = "bfd4f2"
 }
 
-$title = "Call for testers: 5-minute AegisLoop browser and model checks"
+$title = "Call for testers: GPT-5.6 and Codex coexistence checks"
 $legacyTitle = "Call for testers: ChatGPT model switching and browser compatibility"
 
 $body = @'
@@ -35,15 +35,18 @@ No coding is required. Most reports take 5-10 minutes.
 - macOS + Chrome
 - macOS + Edge
 - Chinese ChatGPT UI labels
-- GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 model menu behavior
+- GPT-5.6 Sol / Terra / Luna model menu behavior
+- Legacy GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 regression behavior
 
 ## What to check
 
 1. The AegisLoop panel appears on ChatGPT.
 2. The local bridge shows online.
-3. Switching ChatGPT model mode does not change the ChatGPT conversation route.
-4. The same ChatGPT conversation stays connected to the same local Codex session.
-5. If something blocks the test, the panel or script reports a clear reason such as `login_required`, `browser_challenge`, `model_option_not_found`, `leader_conflict`, or `bridge_timeout`.
+3. The panel shows `Execution route: AegisLoop local bridge`.
+4. Switching ChatGPT model mode does not change the ChatGPT conversation route.
+5. The model does not accidentally start ChatGPT's built-in Codex for an AegisLoop turn.
+6. The same ChatGPT conversation stays connected to the same local Codex session.
+7. If something blocks the test, the panel or script reports a clear reason such as `login_required`, `browser_challenge`, `model_option_not_found`, `leader_conflict`, or `bridge_timeout`.
 
 ## Report template
 
@@ -55,6 +58,8 @@ Browser:
 ChatGPT UI language:
 AegisLoop version:
 Model modes tested:
+Execution route shown:
+Built-in Codex started unexpectedly: yes / no
 Result: pass / partial / blocked
 What happened:
 Sanitized Debug Snapshot or screenshot:

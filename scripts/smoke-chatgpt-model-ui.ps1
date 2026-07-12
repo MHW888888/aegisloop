@@ -1,7 +1,7 @@
 param(
   [string]$CdpUrl = "http://127.0.0.1:9222",
   [string]$OutDir = "output/chatgpt-model-smoke",
-  [string[]]$Models = @("Balanced", "Smart", "Fast", "Advanced", "Ultra", "Professional", "GPT-5.5", "GPT-5.4", "GPT-5.3", "o3"),
+  [string[]]$Models = @("Balanced", "Smart", "Fast", "Advanced", "Ultra", "Professional", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5", "GPT-5.4", "GPT-5.3", "o3"),
   [switch]$SelfCheck
 )
 

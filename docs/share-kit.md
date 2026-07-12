@@ -6,19 +6,19 @@ Repository: https://github.com/MHW888888/aegisloop
 
 ## Short Description
 
-AegisLoop lets ChatGPT plan a coding task while local Codex executes it safely, one guarded step at a time.
+AegisLoop is a guarded control plane for explicit ChatGPT-to-local-Codex execution.
 
 ## 中文短介绍
 
-AegisLoop 让 ChatGPT 负责规划，让本地 Codex 负责执行，中间用本地 bridge 加上显式授权、运行边界、结果确认和审计日志。
+AegisLoop 是一套面向 ChatGPT 到本地 Codex 显式执行路线的安全控制面。
 
 ## What To Say In 10 Seconds
 
-ChatGPT is good at planning. Codex is good at local execution. AegisLoop connects them with local gates, explicit arming, Run Capsules, workspace locks, dedupe, ACK/NACK, and audit logs.
+Built-in Codex is the best default for native ChatGPT workflows. AegisLoop complements it when a dedicated ChatGPT runner must control an existing local Codex session with explicit arming, Run Capsules, workspace locks, ACK/NACK, and audit logs.
 
 ## 中文 10 秒介绍
 
-ChatGPT 擅长规划，Codex 擅长本地执行。AegisLoop 把两者接起来，并加上本地闸门、显式授权、Run Capsule、工作区锁、去重、ACK/NACK 和审计日志。
+原生 Codex 适合 ChatGPT 内置任务、应用、编辑器和终端工作流。需要让专用 ChatGPT 线程继续指定的本地 Codex session，并加入显式 Arm、Run Capsule、ACK/NACK 和审计状态时，再使用 AegisLoop。
 
 ## Where To Share
 
@@ -37,9 +37,9 @@ Share only where project posts are welcome. Avoid repeated reposting.
 ## X / Twitter Draft
 
 ```text
-I built AegisLoop: a guarded local bridge where ChatGPT plans and Codex executes.
+I built AegisLoop: a guarded control plane for explicit ChatGPT-to-local-Codex execution.
 
-It keeps the loop local-first with explicit arming, turn tokens, workspace locks, Run Capsules, dedupe, ACK/NACK, and audit logs.
+Codex now lives inside ChatGPT too. AegisLoop complements that native route when you need an existing local session, explicit arming, Run Capsules, recoverable ACK/NACK delivery, and audit logs.
 
 GitHub: https://github.com/MHW888888/aegisloop
 ```
@@ -53,7 +53,9 @@ No coding required.
 
 Need reports for Chrome / Edge / Brave / macOS / Windows and ChatGPT model switching.
 
-Goal: switching GPT-5.5 / 5.4 / 5.3 / o3 should keep the same ChatGPT conversation -> same local Codex route.
+Current targets: GPT-5.6 Sol / Terra / Luna. Legacy 5.x and o3 reports are still useful.
+
+Goal: switching models should keep the same ChatGPT conversation -> same AegisLoop local Codex route, without accidentally starting built-in Codex.
 
 https://github.com/MHW888888/aegisloop
 ```
@@ -63,7 +65,7 @@ https://github.com/MHW888888/aegisloop
 ```text
 I have been experimenting with safer agentic coding loops and published AegisLoop.
 
-It connects a ChatGPT web conversation to a local Codex session. ChatGPT plans the next step, Codex executes locally, and AegisLoop carries the result back through a guarded local bridge.
+It complements Codex built into ChatGPT by connecting a dedicated ChatGPT runner conversation to an existing local Codex session. ChatGPT plans the next step, Codex executes locally, and AegisLoop carries the result back through a guarded local bridge.
 
 The focus is not unbounded autonomy. The focus is practical control: Chat Mode by default, explicit arming, visible non-secret turn tokens for freshness, workspace locks, Run Capsules, dedupe, ACK/NACK result handling, and audit logs.
 
@@ -132,9 +134,11 @@ GitHub: https://github.com/MHW888888/aegisloop
 ## Show HN Draft
 
 ```text
-Show HN: AegisLoop - guarded ChatGPT-to-Codex local automation
+Show HN: AegisLoop - a guarded control plane for ChatGPT-to-local-Codex execution
 
-I built AegisLoop to connect a ChatGPT web conversation to a local Codex session.
+I built AegisLoop to connect a dedicated ChatGPT runner conversation to an existing local Codex session.
+
+Codex is now available natively inside ChatGPT, editors, terminals, and the Codex app. AegisLoop is not a replacement for those routes. It is for users who need explicit browser-thread-to-local-session binding, arming, isolation, recoverable result delivery, and audit state.
 
 The goal is a bounded engineering loop: ChatGPT plans, Codex executes locally, and a local bridge returns the result with gates, workspace locks, Run Capsules, dedupe, ACK/NACK, and audit logs.
 

@@ -16,7 +16,8 @@ Choose one environment:
 | macOS + Chrome | Does setup and Arm one run work on macOS? |
 | macOS + Edge | Does Edge behave like Chrome on macOS? |
 | Chinese ChatGPT UI | Are model labels and panel state still understandable? |
-| GPT-5.5 / 5.4 / 5.3 / o3 | Does the model return a visible fenced `codex` JSON block? |
+| GPT-5.6 Sol / Terra / Luna | Does the model stay on the AegisLoop route and return a visible fenced `codex` JSON block? |
+| GPT-5.5 / 5.4 / 5.3 / o3 | Does the legacy model target still return a visible fenced `codex` JSON block? |
 
 Please do not claim several paths at once. One clear report is more useful than a broad incomplete test.
 
@@ -54,6 +55,8 @@ ChatGPT UI language:
 AegisLoop version:
 Bridge status: online / offline / blocked
 Model mode tested:
+Execution route shown in panel:
+Built-in Codex started unexpectedly: yes / no
 Result: pass / partial / blocked
 What happened:
 Debug Snapshot included: yes / no

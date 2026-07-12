@@ -22,7 +22,7 @@ ChatGPT conversationId -> AegisLoop binding -> local Codex session / Run Capsule
 
 Model choice is only a generation behavior. It is not a routing key.
 
-If the same ChatGPT conversation switches from Balanced to Ultra, Professional, GPT-5.5, GPT-5.4, GPT-5.3, or o3, AegisLoop should keep the same bound Codex session and capsule. Rebinding is needed only when the ChatGPT conversation URL changes, the maintainer changes `config.json`, or the user explicitly reconnects the tab.
+If the same ChatGPT conversation switches from Balanced to Ultra, Professional, GPT-5.6 Sol/Terra/Luna, or a legacy GPT-5.x/o3 target, AegisLoop should keep the same bound Codex session and capsule. Rebinding is needed only when the ChatGPT conversation URL changes, the maintainer changes `config.json`, or the user explicitly reconnects the tab.
 
 Smooth switching target:
 
@@ -76,13 +76,16 @@ The model menu is not a transport layer. It should never decide the local Codex 
 | Advanced / 高级 | Smoke target | Should follow the normal contract after clear briefing. |
 | Ultra / 超高 | Smoke target | May over-reason and look for tool access. |
 | Professional / 专业 | Smoke target | Treat as a reasoning/pro profile until tested. |
-| GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Exact-mode smoke targets | Need one real report per mode before claiming support. |
+| GPT-5.6 Sol | Current exact-mode smoke target | Need one real report before claiming support. |
+| GPT-5.6 Terra | Current exact-mode smoke target | Need one real report before claiming support. |
+| GPT-5.6 Luna | Current exact-mode smoke target | Need one real report before claiming support. |
+| GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Legacy exact-mode smoke targets | Keep regression reports, but prioritize current modes. |
 | Standard chat models | Usually compatible | May summarize instead of producing a `codex` block. |
 | Faster / smaller models | Usually compatible for small tasks | May produce underspecified prompts. |
 | Pro / reasoning models, including 5.5 Pro-style modes | Compatible only if they follow the page-text contract | They may look for a built-in ChatGPT tool and say it is unavailable. |
 | Older long-running chats | Risky | Old `codex` blocks or branch history can confuse the run. |
 
-Important: AegisLoop is not a built-in ChatGPT tool. A model does not need tool access. It only needs to write one fenced `codex` JSON block as visible page text.
+Important: AegisLoop uses a separate route from ChatGPT's built-in Codex. A model does not need to invoke built-in Codex; it only needs to write one fenced `codex` JSON block as visible page text.
 
 ## 5.5 Pro / Reasoning Mode Check
 
@@ -107,6 +110,7 @@ Record one row per real test:
 | Windows | Edge | standard model | yes/no | yes/no | yes/no | yes/no | yes/no | Pass/Warn/Fail |
 | macOS | Chrome | standard model | yes/no | yes/no | yes/no | yes/no | yes/no | Pass/Warn/Fail |
 | macOS | Chrome | 5.5 Pro-style mode | yes/no | yes/no | yes/no | yes/no | yes/no | Pass/Warn/Fail |
+| macOS | Chrome | GPT-5.6 Sol / Terra / Luna | yes/no | yes/no | yes/no | yes/no | yes/no | Pass/Warn/Fail |
 
 Recommended model rows to collect:
 

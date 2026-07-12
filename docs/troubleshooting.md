@@ -125,7 +125,7 @@ If the model says "I cannot access tools" or "no tool is available", reply with:
 Do not call a ChatGPT tool. AegisLoop is watching this page for a fenced codex JSON block. Reply with only one fenced codex block containing the next local Codex instruction, or <<<LOOP_STOP>>>.
 ```
 
-For a repeatable 5.3 / 5.5 Pro smoke test, see [model compatibility](model-compatibility.md).
+For a repeatable GPT-5.6 Sol/Terra/Luna or legacy 5.x smoke test, see [model compatibility](model-compatibility.md). If ChatGPT starts built-in Codex instead of returning a visible block, see [Codex coexistence](codex-coexistence.md).
 
 ## codex block ignored
 

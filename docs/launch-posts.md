@@ -7,21 +7,21 @@ Repository: https://github.com/MHW888888/aegisloop
 ## English Short Post
 
 ```text
-I just released AegisLoop, a guarded local bridge that lets ChatGPT plan and local Codex execute in a real workspace.
+I just released AegisLoop, a guarded control plane for explicit ChatGPT-to-local-Codex execution.
 
-It keeps the loop local-first and bounded with explicit arming, workspace locks, turn tokens, ACK/NACK result handling, Run Capsules, and audit logs.
+Codex now has native ChatGPT, app, editor, and terminal routes. AegisLoop complements them when you need to bind a dedicated ChatGPT runner to an existing local session with explicit arming, workspace locks, ACK/NACK result handling, Run Capsules, and audit logs.
 
 GitHub: https://github.com/MHW888888/aegisloop
 ```
 
-## English v0.3.16 Post
+## English v0.3.17 Post
 
 ```text
-AegisLoop v0.3.16 is live.
+AegisLoop v0.3.17 is live.
 
-It is a local-first ChatGPT-to-Codex bridge: ChatGPT plans the next step, Codex executes locally, and AegisLoop carries results back with explicit arming, leader leases, one-use turn tokens, pending-result locks, and audit logs.
+It makes the execution route explicit now that Codex is built into ChatGPT too. Native Codex remains the best default for native tasks; AegisLoop is for dedicated ChatGPT runner threads bound to existing local Codex sessions.
 
-This version clarifies that turn tokens are visible freshness markers, not secrets. Real authority stays in the local bridge token, Origin gate, leader lease, Armed Mode, and workspace/capsule policy.
+The panel now shows `Execution route: AegisLoop local bridge`, prompts avoid accidental built-in Codex handoffs, and GPT-5.6 Sol/Terra/Luna are tracked as real-browser smoke targets.
 
 GitHub: https://github.com/MHW888888/aegisloop
 ```
@@ -29,7 +29,7 @@ GitHub: https://github.com/MHW888888/aegisloop
 ## English Longer Post
 
 ```text
-I built AegisLoop because I wanted a safer way to run ChatGPT x Codex engineering loops.
+I built AegisLoop because I wanted a more explicit way to run ChatGPT x local Codex engineering loops.
 
 The flow is simple:
 
@@ -38,7 +38,7 @@ The flow is simple:
 - AegisLoop sends the result back to ChatGPT.
 - Local gates decide whether the next step is allowed.
 
-It is not trying to be a full agent platform. It is a small local control plane for people who want browser-based planning plus local execution, with guardrails: Chat Mode by default, explicit arming, visible non-secret turn tokens, workspace locks, Run Capsules, result ACK/NACK, dedupe, and JSONL audit logs.
+It does not replace Codex built into ChatGPT, the Codex app, editors, or terminals. It is a small local control plane for people who specifically want browser-based planning bound to an existing local session, with Chat Mode by default, explicit arming, workspace locks, Run Capsules, result ACK/NACK, dedupe, and JSONL audit logs.
 
 GitHub: https://github.com/MHW888888/aegisloop
 ```
@@ -48,13 +48,15 @@ GitHub: https://github.com/MHW888888/aegisloop
 Title:
 
 ```text
-Show HN: AegisLoop - a guarded ChatGPT-to-Codex local automation bridge
+Show HN: AegisLoop - a guarded control plane for ChatGPT-to-local-Codex execution
 ```
 
 Body:
 
 ```text
-I built AegisLoop to connect a ChatGPT web conversation to a local Codex session.
+I built AegisLoop to connect a dedicated ChatGPT runner conversation to an existing local Codex session.
+
+Codex now has native ChatGPT, app, editor, terminal, and cloud workflows. AegisLoop complements those routes when explicit local-session binding, arming, isolation, recovery, and audit state matter.
 
 The goal is not fully unbounded autonomy. The goal is a bounded loop: ChatGPT plans the next step, Codex executes locally, and a local bridge sends the result back with explicit arming, workspace locks, dedupe, Run Capsules, ACK/NACK, and audit logs.
 
@@ -75,14 +77,14 @@ GitHub: https://github.com/MHW888888/aegisloop
 GitHub: https://github.com/MHW888888/aegisloop
 ```
 
-## 中文 v0.3.16 帖
+## 中文 v0.3.17 帖
 
 ```text
-AegisLoop v0.3.16 更新了。
+AegisLoop v0.3.17 更新了。
 
-一句话：让 ChatGPT 负责规划，让本地 Codex 负责执行，中间用本地 bridge 加上显式授权、工作区锁、结果 ACK/NACK、Run Capsule 和审计日志。
+Codex 已经融入 ChatGPT、Codex 应用、编辑器和终端。AegisLoop 不替代这些原生入口，而是补充一种更明确的路线：让专用 ChatGPT 执行线程继续指定的本地 Codex session。
 
-这版重点澄清并加固了 turn token：它是可见的新鲜度标记，不是密码，也不是认证 token。真正的授权边界在本地 apiToken、Origin gate、leader lease、Armed Mode、pending result lock 和 workspace/capsule policy。
+这版会在面板中明确显示 `Execution route: AegisLoop local bridge`，并减少 GPT-5.6 等模型误启动内置 Codex 的情况。GPT-5.6 Sol、Terra、Luna 已加入真实浏览器测试目标，但在收到 smoke report 前不会宣称全部验证通过。
 
 GitHub: https://github.com/MHW888888/aegisloop
 ```
