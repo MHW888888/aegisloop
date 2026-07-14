@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AegisLoop",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "description": "Guard explicit ChatGPT-to-local-Codex execution with a local control plane.",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
