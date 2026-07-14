@@ -44,9 +44,17 @@ Version `v0.2.0` focuses on first-run clarity:
 
 The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
 
-## Current Focus: v0.3.18 Structured Executor & Crash Recovery
+## Current Focus: v0.3.19 One-command Health Diagnosis
 
-Version `v0.3.18` moves AegisLoop from plain-text process wrapping toward a recoverable Codex control layer:
+Version `v0.3.19` keeps the structured executor and crash recovery from `v0.3.18`, and makes first-line bridge diagnosis one command:
+
+```powershell
+npm run health
+```
+
+The command distinguishes a missing or invalid config, an offline bridge, and a port occupied by a different service. When the bridge is healthy, it tells the user that the browser extension can retry.
+
+The underlying control layer still provides:
 
 - the preferred CLI adapter uses `codex exec resume --json --output-schema` and validates a stable result envelope;
 - capability detection selects the structured adapter before execution, with a legacy adapter only for older compatible CLIs;
@@ -216,8 +224,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launch.ps1
 Check health:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:17380/health
+npm run health
 ```
+
+For a raw endpoint check, open `http://127.0.0.1:17380/health` in the same browser profile.
 
 Save the same `apiToken` in the extension panel when prompted.
 
@@ -365,6 +375,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.16 release notes: [docs/release-notes-v0.3.16.md](docs/release-notes-v0.3.16.md)
 - v0.3.17 release notes: [docs/release-notes-v0.3.17.md](docs/release-notes-v0.3.17.md)
 - v0.3.18 release notes: [docs/release-notes-v0.3.18.md](docs/release-notes-v0.3.18.md)
+- v0.3.19 release notes: [docs/release-notes-v0.3.19.md](docs/release-notes-v0.3.19.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Promotion playbook: [docs/promotion-playbook.md](docs/promotion-playbook.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)

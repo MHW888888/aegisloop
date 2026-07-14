@@ -1,5 +1,15 @@
 # Troubleshooting
 
+## One-command bridge check
+
+Run this before debugging the browser panel:
+
+```powershell
+npm run health
+```
+
+It reports whether `config.json` is missing or invalid, whether the configured port is offline, whether another service is using the port, or whether the AegisLoop bridge is ready. Once it reports the bridge online, reopen the extension panel and retry.
+
 ## Start with doctor
 
 Run:
