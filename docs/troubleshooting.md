@@ -221,7 +221,27 @@ Open the panel debug mode and check **Selector health**:
 
 Also check the browser console for `[LE]` logs.
 
-The likely fix is updating the selector block in `chrome-extension/content.js`.
+Current selector fallbacks, in priority order:
+
+| Element | Selectors |
+| --- | --- |
+| Composer | `#prompt-textarea`, `form [contenteditable="true"]`, `div[contenteditable="true"]`, `form textarea`, `textarea` |
+| Send button | `button[data-testid="send-button"]`, `button[aria-label*="Send" i]`, `form button[type="submit"]` |
+| Stop button | `button[data-testid="stop-button"]`, `button[aria-label*="Stop" i]` |
+| Messages | `[data-message-author-role]`, then `article[data-testid^="conversation-turn"]` |
+
+The likely fix is updating the `SEL` block in `chrome-extension/content.js`. Do not paste private conversation HTML into an issue. Instead, export a Debug Snapshot and report:
+
+```text
+Browser and version:
+AegisLoop version:
+ChatGPT route type: normal chat / project chat / custom GPT
+Selector health: C:? S:? Stop:? A:? U:?
+Action that failed: seed / result insert / message detection
+Console error name, without private message text:
+Reproduces after extension reload: yes / no
+Sanitized Debug Snapshot attached: yes / no
+```
 
 ## Export Debug Snapshot
 
