@@ -85,6 +85,7 @@ const shellScripts = [
 const powershellScriptsThatMustStayAscii = [
   'scripts/create-model-smoke-issues.ps1',
   'scripts/create-recruitment-issue.ps1',
+  'scripts/refresh-tester-issues.ps1',
   'scripts/smoke-chatgpt-model-ui.ps1',
 ];
 
@@ -183,6 +184,14 @@ for (const expected of ['Edge', 'Brave', 'Firefox', 'Tor Browser', 'Result ACK c
   if (!browserIssueTemplate.includes(expected)) {
     fail(`browser compatibility issue template should mention ${expected}`);
   }
+}
+
+const testerRefresh = read('scripts/refresh-tester-issues.ps1');
+if (!testerRefresh.includes("$taskComment = (@'")) {
+  fail('scripts/refresh-tester-issues.ps1 must use a literal here-string for Markdown fences');
+}
+if (!/```text\r?\nOS:/.test(testerRefresh)) {
+  fail('scripts/refresh-tester-issues.ps1 must preserve the tester report Markdown fence');
 }
 
 if (!process.exitCode) {

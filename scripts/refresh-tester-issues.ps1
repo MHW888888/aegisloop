@@ -69,8 +69,8 @@ If you want to help, comment with the one path you can test. Thank you!
 '@
 
 $taskCommentMarker = "<!-- aegisloop-tester-refresh-v1 -->"
-$taskComment = @"
-$taskCommentMarker
+$taskComment = (@'
+__TASK_COMMENT_MARKER__
 
 This is a no-code testing task.
 
@@ -94,7 +94,7 @@ What counts as done:
 - one clear pass / partial / blocked result;
 - enough detail for a maintainer to reproduce or understand the behavior;
 - no real conversation IDs, tokens, local private paths, private workspace names, or private project content.
-"@
+'@).Replace('__TASK_COMMENT_MARKER__', $taskCommentMarker)
 
 if ($DryRun) {
   Write-Host "[dry-run] would refresh recruitment issue #$RecruitmentIssue"
