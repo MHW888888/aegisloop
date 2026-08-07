@@ -135,6 +135,15 @@ function checkConfig() {
       mark(capabilities.json ? 'ok' : 'warn', '--json support', String(capabilities.json));
       mark(capabilities.outputSchema ? 'ok' : 'warn', '--output-schema support', String(capabilities.outputSchema));
       mark(capabilities.appServer ? 'ok' : 'warn', 'app-server support', String(capabilities.appServer));
+      mark(capabilities.appServerSchemaGeneration ? 'ok' : 'warn', 'app-server JSON Schema generation', String(capabilities.appServerSchemaGeneration));
+      mark(capabilities.appServerTypeScriptGeneration ? 'ok' : 'warn', 'app-server TypeScript generation', String(capabilities.appServerTypeScriptGeneration));
+      mark(capabilities.appServerStdioTransport ? 'ok' : 'warn', 'app-server stdio transport', String(capabilities.appServerStdioTransport));
+      mark(capabilities.appServerUnixTransport ? 'ok' : 'warn', 'app-server Unix transport', String(capabilities.appServerUnixTransport));
+      if (capabilities.appServerWebSocketTransport) {
+        mark(capabilities.appServerWebSocketAuth ? 'ok' : 'warn', 'app-server WebSocket auth', capabilities.appServerWebSocketAuth
+          ? 'available; WebSocket transport remains experimental'
+          : 'missing; do not expose WebSocket transport');
+      }
       mark('ok', 'selected executor adapter', adapter.name + (adapter.fallbackReason ? `; ${adapter.fallbackReason}` : ''));
       mark('warn', 'session resolvability', 'not executed by doctor; configured session ids are checked only when a user arms a run');
     } catch (error) {

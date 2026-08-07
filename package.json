@@ -1,6 +1,6 @@
 {
   "name": "aegisloop",
-  "version": "0.3.19",
+  "version": "0.3.20",
   "private": false,
   "description": "A guarded control plane for explicit ChatGPT-to-local-Codex execution.",
   "main": "server.js",

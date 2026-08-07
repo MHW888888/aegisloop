@@ -32,12 +32,25 @@ function runProbe(bin, args) {
   };
 }
 
+function parseAppServerHelp(text) {
+  const help = String(text || '');
+  return {
+    schemaGeneration: /\bgenerate-json-schema\b/.test(help),
+    typeScriptGeneration: /\bgenerate-ts\b/.test(help),
+    stdioTransport: /stdio:\/\//.test(help) || /--stdio\b/.test(help),
+    unixTransport: /unix:\/\//.test(help),
+    webSocketTransport: /ws:\/\//.test(help),
+    webSocketAuth: /--ws-auth\b/.test(help),
+  };
+}
+
 function probeCodexCapabilities(codex) {
   const prefix = commandPrefix(codex);
   const version = runProbe(codex.bin, [...prefix, '--version']);
   const execHelp = runProbe(codex.bin, [...prefix, 'exec', '--help']);
   const resumeHelp = runProbe(codex.bin, [...prefix, 'exec', 'resume', '--help']);
   const appServerHelp = runProbe(codex.bin, [...prefix, 'app-server', '--help']);
+  const appServer = parseAppServerHelp(appServerHelp.text);
   return {
     version: version.ok ? version.text.split(/\r?\n/)[0] : null,
     versionProbeOk: version.ok,
@@ -45,6 +58,12 @@ function probeCodexCapabilities(codex) {
     json: execHelp.ok && /--json\b/.test(execHelp.text),
     outputSchema: execHelp.ok && /--output-schema\b/.test(execHelp.text),
     appServer: appServerHelp.ok,
+    appServerSchemaGeneration: appServerHelp.ok && appServer.schemaGeneration,
+    appServerTypeScriptGeneration: appServerHelp.ok && appServer.typeScriptGeneration,
+    appServerStdioTransport: appServerHelp.ok && appServer.stdioTransport,
+    appServerUnixTransport: appServerHelp.ok && appServer.unixTransport,
+    appServerWebSocketTransport: appServerHelp.ok && appServer.webSocketTransport,
+    appServerWebSocketAuth: appServerHelp.ok && appServer.webSocketAuth,
     probeError: [version, execHelp, resumeHelp, appServerHelp]
       .map(item => item.error)
       .find(Boolean) || null,
@@ -170,6 +189,7 @@ function createExecutorAdapter(codex, capabilities, schemaPath) {
 module.exports = {
   createExecutorAdapter,
   createJsonlCollector,
+  parseAppServerHelp,
   probeCodexCapabilities,
   validateEnvelope,
 };

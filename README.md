@@ -44,9 +44,13 @@ Version `v0.2.0` focuses on first-run clarity:
 
 The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
 
-## Current Focus: v0.3.19 One-command Health Diagnosis
+## Current Focus: v0.3.20 App Server Capability Guard
 
-Version `v0.3.19` keeps the structured executor and crash recovery from `v0.3.18`, and makes first-line bridge diagnosis one command:
+Version `v0.3.20` keeps the structured executor, crash recovery, and one-command health diagnosis from `v0.3.19`, while making the future Codex App Server boundary easier to verify before migration.
+
+`npm run doctor` now distinguishes basic App Server availability from the capabilities AegisLoop will actually require: version-matched JSON Schema generation, the stable local `stdio://` transport, and optional WebSocket authentication support. AegisLoop does not switch to the experimental WebSocket transport automatically.
+
+First-line bridge diagnosis remains one command:
 
 ```powershell
 npm run health
@@ -63,7 +67,7 @@ The underlying control layer still provides:
 - infrastructure failures are no longer retried blindly after possible file, command, or MCP side effects;
 - result reads now require the same tab leader lease as dispatch and ACK/NACK;
 - root and Run Capsule `AGENTS.md` files keep durable execution rules close to Codex;
-- `npm run doctor` reports Codex version, structured CLI flags, App Server availability, and the selected adapter.
+- `npm run doctor` reports Codex version, structured CLI flags, App Server schema/transport capabilities, and the selected adapter.
 
 The [Codex coexistence guide](docs/codex-coexistence.md) still explains when to use built-in Codex and when AegisLoop is useful. The next architecture step is an App Server policy proxy, not more prompt-only routing; see [the App Server roadmap](docs/app-server-roadmap.md).
 
@@ -376,6 +380,7 @@ These files are local runtime state and are ignored by git:
 - v0.3.17 release notes: [docs/release-notes-v0.3.17.md](docs/release-notes-v0.3.17.md)
 - v0.3.18 release notes: [docs/release-notes-v0.3.18.md](docs/release-notes-v0.3.18.md)
 - v0.3.19 release notes: [docs/release-notes-v0.3.19.md](docs/release-notes-v0.3.19.md)
+- v0.3.20 release notes: [docs/release-notes-v0.3.20.md](docs/release-notes-v0.3.20.md)
 - Share kit / launch copy: [docs/share-kit.md](docs/share-kit.md)
 - Promotion playbook: [docs/promotion-playbook.md](docs/promotion-playbook.md)
 - Growth checklist: [docs/growth-checklist.md](docs/growth-checklist.md)

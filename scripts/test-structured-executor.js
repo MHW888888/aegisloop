@@ -5,6 +5,7 @@ const path = require('path');
 const {
   createExecutorAdapter,
   createJsonlCollector,
+  parseAppServerHelp,
   validateEnvelope,
 } = require('../executors/cli-adapter');
 
@@ -61,5 +62,27 @@ const legacy = createExecutorAdapter(codex, {
 }, schema);
 assert.strictEqual(legacy.name, 'legacy');
 assert.match(legacy.fallbackReason, /not all detected/);
+
+const currentAppServer = parseAppServerHelp(`
+Commands:
+  generate-ts
+  generate-json-schema
+Options:
+  --listen <URL> Supported values: stdio://, unix://, unix://PATH, ws://IP:PORT, off
+  --ws-auth <MODE>
+`);
+assert.deepStrictEqual(currentAppServer, {
+  schemaGeneration: true,
+  typeScriptGeneration: true,
+  stdioTransport: true,
+  unixTransport: true,
+  webSocketTransport: true,
+  webSocketAuth: true,
+});
+
+const legacyAppServer = parseAppServerHelp('Usage: codex app-server --stdio');
+assert.strictEqual(legacyAppServer.stdioTransport, true);
+assert.strictEqual(legacyAppServer.schemaGeneration, false);
+assert.strictEqual(legacyAppServer.webSocketTransport, false);
 
 console.log('structured executor test passed');
