@@ -30,6 +30,12 @@ assert.strictEqual(validateConfig(example), true);
 
 {
   const config = clone(example);
+  config.armLoopMaxDispatches = 51;
+  expectInvalid(config, /armLoopMaxDispatches must be an integer between 1 and 50/);
+}
+
+{
+  const config = clone(example);
   config.bindings[0].conversationMode = 'run-forever';
   expectInvalid(config, /conversationMode must be one of/);
 }

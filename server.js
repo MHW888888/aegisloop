@@ -20,6 +20,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { validateConfig } = require('./config-validation');
+const { configuredCodexSandboxPolicy } = require('./core/execution-policy');
 const { createJobJournal } = require('./core/job-journal');
 const { createExecutorAdapter, probeCodexCapabilities } = require('./executors/cli-adapter');
 
@@ -30,6 +31,7 @@ const STATE_BAK_PATH = STATE_PATH + '.bak';
 const LOG_DIR = path.join(ROOT, 'logs');
 const JOB_DIR = path.join(ROOT, 'jobs');
 const EXECUTOR_SCHEMA_PATH = path.join(ROOT, 'schemas', 'executor-result.schema.json');
+const UI_DIR = path.join(ROOT, 'ui');
 
 fs.mkdirSync(LOG_DIR, { recursive: true });
 fs.mkdirSync(JOB_DIR, { recursive: true });
@@ -57,9 +59,16 @@ const PORT = CONFIG.port || 17380;
 const API_TOKEN = String(CONFIG.apiToken || '').trim();
 const ALLOW_NO_TOKEN = process.env.AEGISLOOP_ALLOW_NO_TOKEN === '1';
 const DEFAULT_ARM_TTL_MS = CONFIG.armTtlMs || 10 * 60 * 1000;
-const DEFAULT_ARM_LOOP_MAX_DISPATCHES = CONFIG.armLoopMaxDispatches || 12;
+const HARD_ARM_LOOP_MAX_DISPATCHES = 50;
+const DEFAULT_ARM_LOOP_MAX_DISPATCHES = Math.min(
+  CONFIG.armLoopMaxDispatches || 12,
+  HARD_ARM_LOOP_MAX_DISPATCHES,
+);
 const DEFAULT_LEADER_LEASE_MS = CONFIG.leaderLeaseMs || 15000;
 const MAX_BODY_BYTES = CONFIG.maxBodyBytes || 1024 * 1024;
+const UI_SESSION_COOKIE = 'aegisloop_ui_session';
+const UI_SESSION_TTL_MS = 60 * 60 * 1000;
+const UI_SESSIONS = new Map();
 const BRIEFING_TEMPLATE_VERSION = CONFIG.briefingTemplateVersion || 'briefing-1';
 const BRIEFING_TEMPLATE_DIR = path.join(ROOT, 'templates', 'briefings');
 const BRIEFING_FILES = [
@@ -70,13 +79,81 @@ const BRIEFING_FILES = [
   'CURRENT_OBJECTIVE.md',
 ];
 
+function requestLoopbackOrigin(request) {
+  const host = String(request.headers.host || '').trim();
+  if (!host) return null;
+  try {
+    const parsed = new URL(`http://${host}`);
+    const hostname = parsed.hostname.toLowerCase();
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(hostname)) return null;
+    if (Number(parsed.port || 80) !== PORT) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function parseCookies(request) {
+  const cookies = {};
+  for (const pair of String(request.headers.cookie || '').split(';')) {
+    const separator = pair.indexOf('=');
+    if (separator <= 0) continue;
+    const name = pair.slice(0, separator).trim();
+    const value = pair.slice(separator + 1).trim();
+    if (name) cookies[name] = value;
+  }
+  return cookies;
+}
+
+function pruneUiSessions(now = Date.now()) {
+  for (const [id, session] of UI_SESSIONS) {
+    if (!session || session.expiresAt <= now) UI_SESSIONS.delete(id);
+  }
+}
+
+function issueUiSession(request) {
+  if (!API_TOKEN && !ALLOW_NO_TOKEN) return null;
+  const origin = requestLoopbackOrigin(request);
+  if (!origin) return null;
+  pruneUiSessions();
+  const id = crypto.randomBytes(32).toString('base64url');
+  UI_SESSIONS.set(id, {
+    origin,
+    expiresAt: Date.now() + UI_SESSION_TTL_MS,
+  });
+  return `${UI_SESSION_COOKIE}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(UI_SESSION_TTL_MS / 1000)}`;
+}
+
+function isUiSessionAuthorized(request) {
+  const expectedOrigin = requestLoopbackOrigin(request);
+  if (!expectedOrigin) return false;
+
+  const requestOrigin = String(request.headers.origin || '').trim();
+  const fetchSite = String(request.headers['sec-fetch-site'] || '').trim().toLowerCase();
+  if (requestOrigin && requestOrigin !== expectedOrigin) return false;
+  if (fetchSite && fetchSite !== 'same-origin') return false;
+  if (!requestOrigin && fetchSite !== 'same-origin') return false;
+  if (!['GET', 'HEAD'].includes(request.method) && requestOrigin !== expectedOrigin) return false;
+
+  pruneUiSessions();
+  const id = parseCookies(request)[UI_SESSION_COOKIE];
+  const session = id && UI_SESSIONS.get(id);
+  return !!(session && session.origin === expectedOrigin && session.expiresAt > Date.now());
+}
+
 function isApiAuthorized(request) {
-  if (!API_TOKEN) return ALLOW_NO_TOKEN;
-  return request.headers['x-aegisloop-token'] === API_TOKEN;
+  if (API_TOKEN && request.headers['x-aegisloop-token'] === API_TOKEN) return true;
+  if (!API_TOKEN && ALLOW_NO_TOKEN) return true;
+  return isUiSessionAuthorized(request);
 }
 
 function configuredAllowedOrigins() {
-  const origins = new Set(['https://chatgpt.com', 'https://chat.openai.com']);
+  const origins = new Set([
+    'https://chatgpt.com',
+    'https://chat.openai.com',
+    `http://127.0.0.1:${PORT}`,
+    `http://localhost:${PORT}`,
+  ]);
   if (CONFIG.corsAllowOrigin) origins.add(String(CONFIG.corsAllowOrigin));
   for (const origin of (CONFIG.allowedOrigins || [])) origins.add(String(origin));
   return origins;
@@ -137,6 +214,24 @@ function buildCapsule(binding) {
     allowedWriteRoot,
     stageNamespaceRequired: raw.stageNamespaceRequired !== false,
     forbiddenBranchContext: Array.isArray(raw.forbiddenBranchContext) ? raw.forbiddenBranchContext.map(String) : [],
+  };
+}
+
+function effectiveExecutionPolicy(conversation) {
+  const capsule = conversation.capsule;
+  const capsuleEnabled = !!(capsule && capsule.enabled);
+  return {
+    noEditRequestEnforced: false,
+    capsule: {
+      enabled: capsuleEnabled,
+      mode: capsuleEnabled ? capsule.mode : 'disabled',
+      enforcement: capsuleEnabled ? 'prompt-and-working-directory' : 'none',
+      executionCwd: capsuleEnabled && capsule.mode === 'readonly'
+        ? capsule.allowedWriteRoot
+        : conversation.workspaceDir,
+      allowedWriteRoot: capsuleEnabled ? capsule.allowedWriteRoot : null,
+    },
+    codexSandbox: configuredCodexSandboxPolicy(CONFIG.codex),
   };
 }
 
@@ -505,6 +600,10 @@ function isTurnNonceUsed(conversation, turnNonce) {
 }
 
 function armConversation(conversation, maxDispatches) {
+  const boundedMaxDispatches = Math.min(
+    Math.max(1, Number.isFinite(maxDispatches) ? Math.floor(maxDispatches) : 1),
+    DEFAULT_ARM_LOOP_MAX_DISPATCHES,
+  );
   conversation.conversationMode = 'armed';
   conversation.loopState = 'running';
   conversation.pauseReason = null;
@@ -512,7 +611,7 @@ function armConversation(conversation, maxDispatches) {
   rotateTurnNonce(conversation);
   conversation.usedTurnTokens = [];
   conversation.armExpiresAt = Date.now() + DEFAULT_ARM_TTL_MS;
-  conversation.armMaxDispatches = maxDispatches;
+  conversation.armMaxDispatches = boundedMaxDispatches;
   conversation.armDispatches = 0;
   conversation.updatedAt = Date.now();
   saveState();
@@ -1488,6 +1587,63 @@ function sendJson(response, code, object) {
   response.end(body);
 }
 
+function uiContentType(file) {
+  const ext = path.extname(file).toLowerCase();
+  if (ext === '.html') return 'text/html; charset=utf-8';
+  if (ext === '.css') return 'text/css; charset=utf-8';
+  if (ext === '.js') return 'text/javascript; charset=utf-8';
+  if (ext === '.svg') return 'image/svg+xml';
+  return 'application/octet-stream';
+}
+
+function uiResponseHeaders(contentType, extra = {}) {
+  return {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    ...extra,
+  };
+}
+
+function sendUiText(response, code, text, extra = {}) {
+  response.writeHead(code, uiResponseHeaders('text/plain; charset=utf-8', extra));
+  response.end(text);
+}
+
+function sendUiFile(request, response, pathname) {
+  if (!requestLoopbackOrigin(request)) {
+    return sendUiText(response, 403, 'Forbidden');
+  }
+
+  let relative = pathname.replace(/^\/ui\/?/, '');
+  if (!relative) relative = 'index.html';
+  try {
+    relative = decodeURIComponent(relative);
+  } catch {
+    return sendUiText(response, 400, 'Bad request');
+  }
+
+  const file = path.resolve(UI_DIR, relative);
+  if (!isPathInside(file, UI_DIR)) {
+    return sendUiText(response, 403, 'Forbidden');
+  }
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    return sendUiText(response, 404, 'Not found');
+  }
+
+  const extra = {};
+  if (file === path.join(UI_DIR, 'index.html')) {
+    const cookie = issueUiSession(request);
+    if (cookie) extra['Set-Cookie'] = cookie;
+  }
+  response.writeHead(200, uiResponseHeaders(uiContentType(file), extra));
+  fs.createReadStream(file).pipe(response);
+}
+
 function readBody(request) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -1538,6 +1694,10 @@ const server = http.createServer(async (request, response) => {
       });
     }
 
+    if ((url.pathname === '/ui' || url.pathname.startsWith('/ui/')) && request.method === 'GET') {
+      return sendUiFile(request, response, url.pathname);
+    }
+
     if (url.pathname.startsWith('/api/') && !isApiAuthorized(request)) {
       return sendJson(response, 401, {
         error: 'unauthorized',
@@ -1558,6 +1718,10 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname === '/api/conversations' && request.method === 'GET') {
       return sendJson(response, 200, {
+        controlPolicy: {
+          armLoopMaxDispatches: DEFAULT_ARM_LOOP_MAX_DISPATCHES,
+          hardArmLoopMaxDispatches: HARD_ARM_LOOP_MAX_DISPATCHES,
+        },
         conversations: Object.values(STATE.conversations).map(c => ({
           conversationId: c.conversationId,
           codexSessionId: c.codexSessionId,
@@ -1571,11 +1735,13 @@ const server = http.createServer(async (request, response) => {
           consecutiveFailures: c.consecutiveFailures,
           lastJobId: c.lastJobId,
           activeDispatchHash: c.activeDispatchHash || null,
+          recoveryRequired: c.recoveryRequired || null,
           hasPendingResult: !!(c.pendingResult && !c.pendingResult.consumed),
           pendingResultId: c.pendingResult && !c.pendingResult.consumed ? ensurePendingResultId(c) : null,
           leaderLease: c.leaderLease || null,
           blockedPayload: c.blockedPayload,
           capsule: c.capsule || null,
+          executionPolicy: effectiveExecutionPolicy(c),
           briefing: getBriefingStatus(c),
         })),
       });
@@ -1671,14 +1837,28 @@ const server = http.createServer(async (request, response) => {
       }
 
       if (body.action === 'arm_once' || body.action === 'arm_loop') {
-        const maxDispatches = body.action === 'arm_once'
-          ? 1
-          : Math.max(1, Number(body.maxDispatches || DEFAULT_ARM_LOOP_MAX_DISPATCHES));
+        let maxDispatches = 1;
+        if (body.action === 'arm_loop') {
+          const requested = body.maxDispatches === undefined
+            ? DEFAULT_ARM_LOOP_MAX_DISPATCHES
+            : Number(body.maxDispatches);
+          if (!Number.isInteger(requested)
+            || requested < 1
+            || requested > DEFAULT_ARM_LOOP_MAX_DISPATCHES) {
+            return sendJson(response, 400, {
+              error: 'invalid_max_dispatches',
+              message: `maxDispatches must be an integer between 1 and ${DEFAULT_ARM_LOOP_MAX_DISPATCHES}`,
+              maxDispatches: DEFAULT_ARM_LOOP_MAX_DISPATCHES,
+            });
+          }
+          maxDispatches = requested;
+        }
         const arm = armConversation(conversation, maxDispatches);
         return sendJson(response, 200, {
           ok: true,
           conversationMode: conversation.conversationMode,
           loopState: conversation.loopState,
+          maxDispatchesLimit: DEFAULT_ARM_LOOP_MAX_DISPATCHES,
           ...arm,
         });
       }

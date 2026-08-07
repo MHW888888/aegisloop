@@ -91,7 +91,7 @@ function validateConfig(config) {
   assertString(config.corsAllowOrigin, 'corsAllowOrigin', { optional: true });
   assertStringArray(config.allowedOrigins, 'allowedOrigins', { optional: true });
   assertInteger(config.armTtlMs, 'armTtlMs', { optional: true, min: 1 });
-  assertInteger(config.armLoopMaxDispatches, 'armLoopMaxDispatches', { optional: true, min: 1 });
+  assertInteger(config.armLoopMaxDispatches, 'armLoopMaxDispatches', { optional: true, min: 1, max: 50 });
   assertInteger(config.leaderLeaseMs, 'leaderLeaseMs', { optional: true, min: 1000 });
   assertInteger(config.minIntervalMs, 'minIntervalMs', { optional: true, min: 0 });
   assertInteger(config.maxResultChars, 'maxResultChars', { optional: true, min: 1 });

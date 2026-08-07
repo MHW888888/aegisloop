@@ -16,7 +16,7 @@ function zh(...codes) {
 function copyDir(from, to) {
   fs.mkdirSync(to, { recursive: true });
   for (const ent of fs.readdirSync(from, { withFileTypes: true })) {
-    if (['.git', 'logs', 'state.json', 'config.json'].includes(ent.name)) continue;
+    if (['.git', 'logs', 'bridge.pid', 'state.json', 'state.json.bak', 'config.json'].includes(ent.name)) continue;
     const src = path.join(from, ent.name);
     const dst = path.join(to, ent.name);
     if (ent.isDirectory()) copyDir(src, dst);

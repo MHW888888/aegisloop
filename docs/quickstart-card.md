@@ -30,22 +30,31 @@ For the safest first run, use `examples/sample-workspace` as `workspaceDir`. It 
 Run:
 
 ```powershell
+npm run init:local
 npm run doctor
 npm start
 ```
 
-Open:
+Open the local UI:
+
+```text
+http://127.0.0.1:17380/ui/
+```
+
+or check bridge health:
 
 ```text
 http://127.0.0.1:17380/health
 ```
 
-You should see JSON.
+The local UI should show `Bridge online`.
+
+The local UI uses a same-origin `HttpOnly` session. Its HTML and JavaScript never receive the configured `apiToken`.
 
 中文速记：
 
 ```text
-先 npm run doctor，再 npm start，再打开 /health 看 bridge 是否在线。
+先 npm run init:local，再 npm run doctor，再 npm start。打开 /ui/ 看 Bridge online。
 ```
 
 ## Recommended ChatGPT Thread Setup
@@ -97,7 +106,7 @@ Then click **Use starter text** and **Arm one run** in the extension panel.
 
 ## First Codex Task
 
-For a first safe run, ask Codex to read only:
+For a first safe run, ask Codex not to edit files. This is a request in the prompt, not a sandbox guarantee:
 
 ````markdown
 ```codex

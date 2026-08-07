@@ -215,6 +215,14 @@ async function main() {
       },
     });
     assert.strictEqual(chatgptOrigin.status, 200);
+    assert.strictEqual(chatgptOrigin.json.controlPolicy.armLoopMaxDispatches, 2);
+    assert.strictEqual(chatgptOrigin.json.controlPolicy.hardArmLoopMaxDispatches, 50);
+    const conversationStatus = chatgptOrigin.json.conversations.find(item => item.conversationId === conversationId);
+    assert.strictEqual(conversationStatus.executionPolicy.noEditRequestEnforced, false);
+    assert.strictEqual(conversationStatus.executionPolicy.capsule.mode, 'readonly');
+    assert.strictEqual(conversationStatus.executionPolicy.capsule.enforcement, 'prompt-and-working-directory');
+    assert.strictEqual(conversationStatus.executionPolicy.codexSandbox.policy, 'not-specified');
+    assert.strictEqual(conversationStatus.executionPolicy.codexSandbox.enforced, false);
 
     const extensionOrigin = await fetchJson(`${base}/api/conversations`, {
       headers: {
@@ -223,6 +231,23 @@ async function main() {
       },
     });
     assert.strictEqual(extensionOrigin.status, 200);
+
+    const oversizedLoop = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, clientId, action: 'arm_loop', maxDispatches: 3 }),
+    });
+    assert.strictEqual(oversizedLoop.status, 400);
+    assert.strictEqual(oversizedLoop.json.error, 'invalid_max_dispatches');
+    assert.strictEqual(oversizedLoop.json.maxDispatches, 2);
+
+    const fractionalLoop = await fetchJson(`${base}/api/mode`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ conversationId, clientId, action: 'arm_loop', maxDispatches: 1.5 }),
+    });
+    assert.strictEqual(fractionalLoop.status, 400);
+    assert.strictEqual(fractionalLoop.json.error, 'invalid_max_dispatches');
 
     const unsafeArm = await fetchJson(`${base}/api/mode`, {
       method: 'POST',
