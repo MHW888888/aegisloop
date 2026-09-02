@@ -1,6 +1,6 @@
 {
   "name": "aegisloop",
-  "version": "0.3.21",
+  "version": "0.3.22",
   "private": false,
   "description": "A guarded control plane for explicit ChatGPT-to-local-Codex execution.",
   "main": "server.js",
@@ -11,8 +11,8 @@
     "init:local": "node scripts/init-local-config.js",
     "open:ui": "node scripts/open-ui.js",
     "check": "npm run check:static && npm run test:unit && npm run test:bridge && npm run test:fixture",
-    "check:static": "node --check server.js && node --check config-validation.js && node --check core/execution-policy.js && node --check core/job-journal.js && node --check executors/cli-adapter.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check ui/app.js && node --check scripts/doctor.js && node --check scripts/health.js && node --check scripts/init-local-config.js && node --check scripts/open-ui.js && node --check scripts/test-api-flow.js && node --check scripts/test-execution-policy.js && node --check scripts/test-health.js && node --check scripts/test-job-journal.js && node --check scripts/test-structured-executor.js && node --check scripts/test-structured-server.js && node --check scripts/test-ui-security.js",
-    "test:unit": "node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-extension-compat.js && node scripts/test-chatgpt-dom-fixture.js && node scripts/test-state-machine.js && node scripts/test-execution-policy.js && node scripts/test-structured-executor.js && node scripts/test-health.js && node scripts/test-job-journal.js && node scripts/test-text-integrity.js",
+    "check:static": "node --check server.js && node --check config-validation.js && node --check core/execution-policy.js && node --check core/job-journal.js && node --check executors/cli-adapter.js && node --check chrome-extension/background.js && node --check chrome-extension/content.js && node --check ui/app.js && node --check scripts/doctor.js && node --check scripts/health.js && node --check scripts/init-local-config.js && node --check scripts/open-ui.js && node --check scripts/test-api-flow.js && node --check scripts/test-execution-policy.js && node --check scripts/test-health.js && node --check scripts/test-job-journal.js && node --check scripts/test-structured-executor.js && node --check scripts/test-structured-server.js && node --check scripts/test-ui-runtime.js && node --check scripts/test-ui-security.js",
+    "test:unit": "node scripts/test-config-validation.js && node scripts/test-briefing-materializer.js && node scripts/test-extension-compat.js && node scripts/test-chatgpt-dom-fixture.js && node scripts/test-state-machine.js && node scripts/test-execution-policy.js && node scripts/test-structured-executor.js && node scripts/test-health.js && node scripts/test-job-journal.js && node scripts/test-ui-runtime.js && node scripts/test-text-integrity.js",
     "test:bridge": "node scripts/test-api-flow.js && node scripts/test-structured-server.js && node scripts/test-unicode-runtime.js && node scripts/test-ui-security.js",
     "test:fixture": "node scripts/test-real-browser-recovery-fixture.js && node scripts/test-real-loop-fixture.js",
     "doctor": "node scripts/doctor.js",

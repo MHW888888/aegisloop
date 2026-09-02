@@ -1,6 +1,8 @@
 'use strict';
 
 const clientKey = 'aegisloop-ui-client-id';
+const API_TIMEOUT_MS = 8000;
+let pageClientId = '';
 const state = {
   conversations: [],
   selectedId: '',
@@ -13,6 +15,7 @@ const state = {
   recoveredPending: null,
   maxLoopDispatches: 12,
   progressTimer: null,
+  refreshing: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -73,12 +76,20 @@ const templates = {
 };
 
 function clientIdFor() {
-  let id = localStorage.getItem(clientKey);
+  if (pageClientId) return pageClientId;
+  let id = '';
+  try {
+    id = sessionStorage.getItem(clientKey) || '';
+  } catch {}
   if (!id) {
-    id = `ui-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
-    localStorage.setItem(clientKey, id);
+    const suffix = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
+    id = `ui-${suffix}`;
+    try { sessionStorage.setItem(clientKey, id); } catch {}
   }
-  return id;
+  pageClientId = id;
+  return pageClientId;
 }
 
 function setPill(el, kind, text) {
@@ -132,27 +143,41 @@ function finishProgress(ok) {
 async function api(path, options = {}) {
   const headers = {};
   if (options.body) headers['Content-Type'] = 'application/json';
-  const response = await fetch(path, {
-    method: options.method || 'GET',
-    credentials: 'same-origin',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const text = await response.text();
-  let json = {};
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    json = { raw: text };
-  }
-  if (!response.ok) {
-    const detail = json.error || json.message || text || response.statusText;
-    const error = new Error(detail);
-    error.status = response.status;
-    error.body = json;
+    const response = await fetch(path, {
+      method: options.method || 'GET',
+      credentials: 'same-origin',
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let json = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { raw: text };
+    }
+    if (!response.ok) {
+      const detail = json.error || json.message || text || response.statusText;
+      const error = new Error(detail);
+      error.status = response.status;
+      error.body = json;
+      throw error;
+    }
+    return json;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      const timeout = new Error('bridge_timeout');
+      timeout.code = 'bridge_timeout';
+      throw timeout;
+    }
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return json;
 }
 
 function realConversations(conversations) {
@@ -188,7 +213,7 @@ function renderConversationOptions() {
 }
 
 function shortWorkspace(workspace) {
-  const parts = String(workspace || '').split('/').filter(Boolean);
+  const parts = String(workspace || '').split(/[\\/]/).filter(Boolean);
   return parts.slice(-1)[0] || workspace || 'Unknown workspace';
 }
 
@@ -283,8 +308,10 @@ function renderRecoveryControls(conversation) {
 }
 
 async function refreshStatus(quiet = false) {
+  if (state.refreshing) return false;
+  state.refreshing = true;
   try {
-    const health = await fetch('/health').then((r) => r.json());
+    const health = await api('/health');
     setPill($('bridgeStatus'), health.ok ? 'ok' : 'bad', health.ok ? 'Bridge online' : 'Bridge offline');
     const data = await api('/api/conversations');
     state.authenticated = true;
@@ -307,11 +334,21 @@ async function refreshStatus(quiet = false) {
     }
     renderStatus();
     if (!quiet) log('Status refreshed.');
+    return true;
   } catch (error) {
     state.authenticated = false;
     setPill($('bridgeStatus'), 'bad', 'Bridge error');
-    $('runBtn').disabled = true;
+    renderStatus();
+    const failureLabel = error.code === 'bridge_timeout'
+      ? 'Bridge timeout'
+      : error.status === 401
+        ? 'Session expired'
+        : 'Unavailable';
+    setPill($('runStatus'), 'bad', failureLabel);
     if (!quiet) log(`Refresh failed: ${error.message}`);
+    return false;
+  } finally {
+    state.refreshing = false;
   }
 }
 

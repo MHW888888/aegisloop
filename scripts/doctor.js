@@ -135,6 +135,10 @@ function checkConfig() {
       mark(capabilities.json ? 'ok' : 'warn', '--json support', String(capabilities.json));
       mark(capabilities.outputSchema ? 'ok' : 'warn', '--output-schema support', String(capabilities.outputSchema));
       mark(capabilities.appServer ? 'ok' : 'warn', 'app-server support', String(capabilities.appServer));
+      if (capabilities.appServerDaemonManagement || capabilities.appServerDaemonProxy) {
+        mark(capabilities.appServerDaemonManagement ? 'ok' : 'warn', 'app-server daemon management', String(capabilities.appServerDaemonManagement));
+        mark(capabilities.appServerDaemonProxy ? 'ok' : 'warn', 'app-server daemon proxy', String(capabilities.appServerDaemonProxy));
+      }
       mark(capabilities.appServerSchemaGeneration ? 'ok' : 'warn', 'app-server JSON Schema generation', String(capabilities.appServerSchemaGeneration));
       mark(capabilities.appServerTypeScriptGeneration ? 'ok' : 'warn', 'app-server TypeScript generation', String(capabilities.appServerTypeScriptGeneration));
       mark(capabilities.appServerStdioTransport ? 'ok' : 'warn', 'app-server stdio transport', String(capabilities.appServerStdioTransport));
