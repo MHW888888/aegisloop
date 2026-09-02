@@ -65,6 +65,8 @@ assert.match(legacy.fallbackReason, /not all detected/);
 
 const currentAppServer = parseAppServerHelp(`
 Commands:
+  daemon
+  proxy
   generate-ts
   generate-json-schema
 Options:
@@ -72,6 +74,8 @@ Options:
   --ws-auth <MODE>
 `);
 assert.deepStrictEqual(currentAppServer, {
+  daemonManagement: true,
+  daemonProxy: true,
   schemaGeneration: true,
   typeScriptGeneration: true,
   stdioTransport: true,
@@ -82,6 +86,8 @@ assert.deepStrictEqual(currentAppServer, {
 
 const legacyAppServer = parseAppServerHelp('Usage: codex app-server --stdio');
 assert.strictEqual(legacyAppServer.stdioTransport, true);
+assert.strictEqual(legacyAppServer.daemonManagement, false);
+assert.strictEqual(legacyAppServer.daemonProxy, false);
 assert.strictEqual(legacyAppServer.schemaGeneration, false);
 assert.strictEqual(legacyAppServer.webSocketTransport, false);
 

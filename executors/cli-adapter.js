@@ -35,6 +35,8 @@ function runProbe(bin, args) {
 function parseAppServerHelp(text) {
   const help = String(text || '');
   return {
+    daemonManagement: /^\s*daemon(?:\s|$)/m.test(help),
+    daemonProxy: /^\s*proxy(?:\s|$)/m.test(help),
     schemaGeneration: /\bgenerate-json-schema\b/.test(help),
     typeScriptGeneration: /\bgenerate-ts\b/.test(help),
     stdioTransport: /stdio:\/\//.test(help) || /--stdio\b/.test(help),
@@ -58,6 +60,8 @@ function probeCodexCapabilities(codex) {
     json: execHelp.ok && /--json\b/.test(execHelp.text),
     outputSchema: execHelp.ok && /--output-schema\b/.test(execHelp.text),
     appServer: appServerHelp.ok,
+    appServerDaemonManagement: appServerHelp.ok && appServer.daemonManagement,
+    appServerDaemonProxy: appServerHelp.ok && appServer.daemonProxy,
     appServerSchemaGeneration: appServerHelp.ok && appServer.schemaGeneration,
     appServerTypeScriptGeneration: appServerHelp.ok && appServer.typeScriptGeneration,
     appServerStdioTransport: appServerHelp.ok && appServer.stdioTransport,
