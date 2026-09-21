@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.22';
+  const CONTENT_VERSION = '0.3.23';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -190,15 +190,8 @@
   function log(...a) { if (LE.debug) console.log('%c[LE]', 'color:#0a0', ...a); }
 
   function loadClientId() {
-    try {
-      const existing = sessionStorage.getItem('aegisloopClientId');
-      if (existing) return existing;
-      const id = 'tab-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2));
-      sessionStorage.setItem('aegisloopClientId', id);
-      return id;
-    } catch (e) {
-      return 'tab-' + String(Date.now()) + '-' + Math.random().toString(16).slice(2);
-    }
+    // Duplicated tabs can inherit sessionStorage; only this content instance owns its identity.
+    return 'tab-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2));
   }
 
   function resetProtocolRecovery() {

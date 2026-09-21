@@ -44,9 +44,11 @@ Version `v0.2.0` focuses on first-run clarity:
 
 The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
 
-## Current Focus: v0.3.22 Local Console Reliability
+## Current Focus: v0.3.23 Console Recovery Checks
 
-The optional local console now uses a distinct leader identity per independently opened browser tab, bounds every UI API request, and prevents overlapping status refreshes. A reload in the same tab keeps its identity. Bridge or session failures disable both run entry points instead of leaving stale controls active.
+The optional local console and Chrome extension now create a fresh identity for each page instance, including copied tabs and reloads. This prevents copied browser storage from duplicating leader authority. After a console reload, wait for the previous lease to expire (15 seconds by default), then recover the pending result. Recovery never automatically re-executes the task.
+
+Recovery controls check authentication, leader ownership, active execution, and the current result ID. A real Playwright browser fixture now exercises copied storage, leader conflicts, expired sessions, and recovery across refreshes in CI. UI requests remain bounded and status polling remains single-flight.
 
 The console remains a same-origin, token-safe surface for bounded one-shot and loop runs. It keeps server-side dispatch caps, exact turn-token checks, leader leases, pending-result recovery, and an explicit distinction between prompt guidance and enforced Codex sandbox policy. The Chrome extension route remains supported.
 

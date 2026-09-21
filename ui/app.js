@@ -1,6 +1,5 @@
 'use strict';
 
-const clientKey = 'aegisloop-ui-client-id';
 const API_TIMEOUT_MS = 8000;
 let pageClientId = '';
 const state = {
@@ -77,18 +76,11 @@ const templates = {
 
 function clientIdFor() {
   if (pageClientId) return pageClientId;
-  let id = '';
-  try {
-    id = sessionStorage.getItem(clientKey) || '';
-  } catch {}
-  if (!id) {
-    const suffix = typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
-    id = `ui-${suffix}`;
-    try { sessionStorage.setItem(clientKey, id); } catch {}
-  }
-  pageClientId = id;
+  // Browser tab duplication can copy sessionStorage, so identity belongs to the document.
+  const suffix = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
+  pageClientId = `ui-${suffix}`;
   return pageClientId;
 }
 
@@ -161,7 +153,7 @@ async function api(path, options = {}) {
       json = { raw: text };
     }
     if (!response.ok) {
-      const detail = json.error || json.message || text || response.statusText;
+      const detail = json.error || json.message || json.status || text || response.statusText;
       const error = new Error(detail);
       error.status = response.status;
       error.body = json;
@@ -296,15 +288,17 @@ function renderRecoveryControls(conversation) {
     && (!conversation.pendingResultId || recovered.result.resultId === conversation.pendingResultId));
   if (recovered && !matchingRecovered) state.recoveredPending = null;
   $('recoverBtn').hidden = matchingRecovered;
-  $('recoverBtn').disabled = !conversation
-    || !state.authenticated
-    || state.recovering
-    || !conversation.hasPendingResult
-    || !leaderAvailable(conversation);
+  const blocked = !canRecoverResult(conversation);
+  $('recoverBtn').disabled = blocked;
   $('ackRecoveredBtn').hidden = !matchingRecovered;
   $('nackRecoveredBtn').hidden = !matchingRecovered;
-  $('ackRecoveredBtn').disabled = state.recovering;
-  $('nackRecoveredBtn').disabled = state.recovering;
+  $('ackRecoveredBtn').disabled = blocked || !matchingRecovered;
+  $('nackRecoveredBtn').disabled = blocked || !matchingRecovered;
+}
+
+function canRecoverResult(conversation) {
+  return !!conversation && state.authenticated && !state.running && !state.recovering
+    && conversation.hasPendingResult && leaderAvailable(conversation);
 }
 
 async function refreshStatus(quiet = false) {
@@ -589,7 +583,7 @@ function renderRecoveredResult(result) {
 
 async function recoverPendingResult() {
   const conversation = selectedConversation();
-  if (!conversation || !conversation.hasPendingResult || state.recovering) return;
+  if (!canRecoverResult(conversation)) return;
   state.recovering = true;
   renderRecoveryControls(conversation);
   try {
@@ -619,7 +613,9 @@ async function recoverPendingResult() {
 async function completeRecoveredResult(action) {
   const recovered = state.recoveredPending;
   const conversation = selectedConversation();
-  if (!recovered || !conversation || recovered.conversationId !== conversation.conversationId || state.recovering) return;
+  if (!canRecoverResult(conversation) || !recovered
+    || recovered.conversationId !== conversation.conversationId
+    || (conversation.pendingResultId && recovered.result.resultId !== conversation.pendingResultId)) return;
   state.recovering = true;
   renderRecoveryControls(conversation);
   const result = recovered.result;

@@ -3,6 +3,8 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
+const crypto = require('crypto').webcrypto;
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -81,7 +83,12 @@ assert.match(content, /Selector health/, 'panel must expose selector health');
 assert.match(content, /selectorHealth/, 'content must compute selector health');
 assert.doesNotMatch(content, /action:\s*'chat'[\s\S]{0,120}assistant_missing_codex/, 'missing codex recovery must not silently switch to Chat Mode');
 assert.match(content, /loadClientId/, 'content must create a per-tab client id');
-assert.match(content, /sessionStorage\.getItem\('aegisloopClientId'\)/, 'client id must be tab/session scoped');
+const identitySource = content.slice(content.indexOf('  function loadClientId()'), content.indexOf('  function resetProtocolRecovery()'));
+const clonedStorage = { getItem: () => 'tab-cloned-client', setItem() {} };
+const firstClient = vm.runInNewContext(identitySource + '\nloadClientId();', { crypto, sessionStorage: clonedStorage });
+const copiedClient = vm.runInNewContext(identitySource + '\nloadClientId();', { crypto, sessionStorage: clonedStorage });
+assert.notStrictEqual(firstClient, copiedClient, 'copied extension tabs must not inherit the same leader identity');
+assert.match(firstClient, /^tab-/);
 assert.match(content, /LEADER_HEARTBEAT_MS = 5000/, 'leader lease must have a 5s heartbeat cadence');
 assert.match(content, /lastLeaderHeartbeatAt/, 'content must renew the leader lease while the tab stays active');
 assert.match(content, /leaderLease = r\.json\.leaderLease/, 'content must store bridge leader lease state');
