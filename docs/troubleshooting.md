@@ -68,6 +68,8 @@ If an API response says `leader_conflict`, the same ChatGPT conversation is prob
 
 The extension panel shows the current tab leader status, local client id, and lease countdown. If it says **not leader**, execution controls are disabled on that tab by design.
 
+The local `/ui/` console creates a new client identity for every page load, including duplicated tabs. After reloading, **In use elsewhere** can remain visible until the previous lease expires (15 seconds by default). Wait for the status refresh, then select **Recover** if a result is pending. Recovery displays the same result and does not run the task again. ACK and **Keep pending** remain disabled when authentication is unavailable, another client owns the lease, or execution is active.
+
 ## ChatGPT tab is not connected
 
 The page conversation is not bound to a local Codex session.

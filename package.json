@@ -1,6 +1,6 @@
 {
   "name": "aegisloop",
-  "version": "0.3.22",
+  "version": "0.3.23",
   "private": false,
   "description": "A guarded control plane for explicit ChatGPT-to-local-Codex execution.",
   "main": "server.js",
@@ -29,6 +29,7 @@
     "test:text": "node scripts/test-text-integrity.js",
     "test:unicode": "node scripts/test-unicode-runtime.js",
     "test:ui-security": "node scripts/test-ui-security.js",
+    "test:ui:browser": "node scripts/test-ui-browser.js",
     "issues:stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-stability-issues.ps1",
     "issues:model-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-model-smoke-issues.ps1",
     "issues:recruit-testers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-recruitment-issue.ps1",

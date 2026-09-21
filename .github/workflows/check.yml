@@ -52,3 +52,17 @@ jobs:
         with:
           node-version: 22
       - run: npm run test:fixture
+
+  ui-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NODE_PATH: ${{ runner.temp }}/aegisloop-browser/node_modules
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm install --prefix "$RUNNER_TEMP/aegisloop-browser" --no-package-lock --ignore-scripts playwright@1.62.1
+      - run: node "$NODE_PATH/playwright/cli.js" install --with-deps chromium
+      - run: npm run test:ui:browser

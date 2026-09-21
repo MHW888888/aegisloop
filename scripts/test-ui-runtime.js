@@ -74,7 +74,7 @@ function loadApp({ sessionStore = storage(), fetchImpl, timeoutMs = 30 } = {}) {
     .replace('const API_TIMEOUT_MS = 8000;', `const API_TIMEOUT_MS = ${timeoutMs};`)
     .replace(/\ninit\(\);\s*$/, [
       '',
-      'globalThis.__aegisUiTest = { clientIdFor, api, refreshStatus, shortWorkspace, state };',
+      'globalThis.__aegisUiTest = { clientIdFor, api, refreshStatus, shortWorkspace, state, renderStatus, completeRecoveredResult };',
       '',
     ].join('\n'));
   const context = {
@@ -112,7 +112,9 @@ async function main() {
   assert.strictEqual(tabA.clientIdFor(), tabAId, 'one page must keep a stable clientId');
 
   const reloadedTabA = loadApp({ sessionStore: tabAStorage });
-  assert.strictEqual(reloadedTabA.clientIdFor(), tabAId, 'a reload in the same tab must keep its clientId');
+  assert.notStrictEqual(reloadedTabA.clientIdFor(), tabAId, 'a new document must have its own clientId');
+  const copiedTab = loadApp({ sessionStore: storage({ 'aegisloop-ui-client-id': tabAId }) });
+  assert.notStrictEqual(copiedTab.clientIdFor(), tabAId, 'copied sessionStorage must not clone leader authority');
   assert.strictEqual(tabA.shortWorkspace('C:\\Users\\test\\repo'), 'repo');
   assert.strictEqual(tabA.shortWorkspace('/Users/test/repo'), 'repo');
 
@@ -175,6 +177,40 @@ async function main() {
   assert.strictEqual(expiredSession.elements.get('runBtn').disabled, true);
   assert.strictEqual(expiredSession.elements.get('runLoopBtn').disabled, true);
   assert.strictEqual(expiredSession.elements.get('runStatus').textContent, 'Session expired');
+
+  const conflict = loadApp({
+    fetchImpl: async () => jsonResponse({ ok: false, status: 'leader_conflict' }, 409),
+  });
+  await assert.rejects(conflict.api('/api/result/ack'), /leader_conflict/);
+
+  for (const blockedBy of ['authentication', 'leader', 'running', 'pending_result', 'result_id']) {
+    let writes = 0;
+    const recovery = loadApp({ fetchImpl: async () => {
+      writes += 1;
+      return jsonResponse({ ok: true });
+    } });
+    const conversation = {
+      conversationId: 'conversation-test',
+      conversationMode: 'chat',
+      hasPendingResult: blockedBy !== 'pending_result',
+      pendingResultId: blockedBy === 'result_id' ? 'result-new' : 'result-test',
+      leaderLease: blockedBy === 'leader' ? { clientId: 'other-client', expiresAt: Date.now() + 15000 } : null,
+    };
+    recovery.state.conversations = [conversation];
+    recovery.state.selectedId = conversation.conversationId;
+    recovery.state.authenticated = blockedBy !== 'authentication';
+    recovery.state.running = blockedBy === 'running';
+    recovery.state.recoveredPending = {
+      conversationId: conversation.conversationId,
+      result: { resultId: 'result-test', jobId: 'job-test' },
+    };
+    recovery.renderStatus();
+    assert.strictEqual(recovery.elements.get('ackRecoveredBtn').disabled, true, `${blockedBy}: ACK must be disabled`);
+    assert.strictEqual(recovery.elements.get('nackRecoveredBtn').disabled, true, `${blockedBy}: NACK must be disabled`);
+    await recovery.completeRecoveredResult('ack');
+    await recovery.completeRecoveredResult('nack');
+    assert.strictEqual(writes, 0, `${blockedBy}: stale handlers must not send writes`);
+  }
 
   console.log('UI runtime isolation and polling checks passed');
 }

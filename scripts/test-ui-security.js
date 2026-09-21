@@ -68,6 +68,7 @@ async function main() {
     port,
     contractVersion: 'le-3.3',
     apiToken: token,
+    leaderLeaseMs: 1000,
     armLoopMaxDispatches: 2,
     runtimeRoot: path.join(parent, 'runtime'),
     bindings: [{
@@ -241,7 +242,10 @@ async function main() {
     assert.strictEqual(pendingAfterReload.hasPendingResult, true);
     assert.strictEqual(pendingAfterReload.pendingResultId, fetchedBeforeReload.resultId);
 
-    const recoveredAfterReload = await fetch(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=client-ui-security`, {
+    // A reloaded document has a fresh identity and must wait for the original lease.
+    const leaseWait = Math.max(0, pendingAfterReload.leaderLease.expiresAt - Date.now()) + 20;
+    await new Promise(resolve => setTimeout(resolve, leaseWait));
+    const recoveredAfterReload = await fetch(`${base}/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=client-ui-reloaded`, {
       headers: reopenedHeaders,
     });
     assert.strictEqual(recoveredAfterReload.status, 200);
@@ -253,7 +257,7 @@ async function main() {
       headers: reopenedHeaders,
       body: JSON.stringify({
         conversationId,
-        clientId: 'client-ui-security',
+        clientId: 'client-ui-reloaded',
         jobId: recoveredAfterReloadBody.result.jobId,
         resultId: recoveredAfterReloadBody.result.resultId,
       }),
