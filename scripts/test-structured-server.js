@@ -107,6 +107,7 @@ async function main() {
   }, null, 2), 'utf8');
 
   const child = spawn(process.execPath, ['server.js'], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+  const childClosed = new Promise(resolve => child.once('close', resolve));
   let output = '';
   child.stdout.on('data', chunk => { output += chunk; });
   child.stderr.on('data', chunk => { output += chunk; });
@@ -154,8 +155,21 @@ async function main() {
     console.log('structured server integration test passed');
   } finally {
     child.kill();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    fs.rmSync(parent, { recursive: true, force: true });
+    let exitTimer;
+    try {
+      await Promise.race([
+        childClosed,
+        new Promise((_, reject) => {
+          exitTimer = setTimeout(() => reject(new Error('test bridge did not exit during cleanup')), 5000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(exitTimer);
+    }
+    // Windows may release directory handles shortly after the process closes.
+    assert.strictEqual(path.dirname(path.resolve(parent)), path.resolve(os.tmpdir()));
+    assert.match(path.basename(parent), /^aegisloop-structured-server-/);
+    fs.rmSync(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 
