@@ -18,7 +18,18 @@ Model switching is route-neutral. AegisLoop binds by ChatGPT `conversationId`, n
 same ChatGPT conversation URL = same local Codex session binding
 ```
 
-Switching between Smart, Fast, Balanced, Advanced, Ultra, Professional, GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4, GPT-5.3, or o3 inside the same ChatGPT conversation should not change the Codex route. Only a different ChatGPT conversation URL, a config change, or an explicit reconnect should change the binding.
+Switching between GPT-6 Astra/Sol/Luna, older model families, or reasoning profiles inside the same ChatGPT conversation should not change the Codex route. Only a different ChatGPT conversation URL, a config change, or an explicit reconnect should change the binding.
+
+## GPT-6 Verification Boundary
+
+As of 2026-09-23, [OpenAI's model guidance](https://developers.openai.com/api/docs/guides/latest-model) lists `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna`. AegisLoop does not call the Responses or Chat Completions API directly. It therefore does not inject model-specific sampling, reasoning, or asynchronous tool parameters.
+
+- ChatGPT planner: emits a visible protocol block. A changed model label alone neither invalidates nor grants route authority. Live output-format compliance still needs a logged-in smoke report.
+- Local executor: the configured Codex CLI owns model availability. Use its supported `--model` option in `codex.args` when deliberately selecting a model; keep the same session ID. Adapter regression tests cover preserving all three GPT-6 IDs and structured output flags. These tests do not contact a model.
+- Run `npm run doctor` to check the installed CLI's capabilities. A successful capability probe is not model entitlement or a completed end-to-end task.
+- Native ChatGPT/Codex tools are a separate route. Do not arm AegisLoop and native execution for the same task simultaneously.
+
+See [official non-interactive Codex documentation](https://learn.chatgpt.com/docs/non-interactive-mode) for CLI configuration. AegisLoop does not automatically change a user's model, account, approval policy, or session.
 
 ## Smooth Model Switching
 
@@ -67,7 +78,8 @@ Good recovery path:
 | Advanced / 高级 | Usually follows the contract with enough context. | Avoid overlong first tasks. |
 | Ultra / 超高 | May spend more effort reasoning about the request. | Remind it not to call tools if it over-interprets Codex. |
 | Professional / 专业 | May behave like a stronger reasoning/profile mode. | Use the model brief before arming. |
-| GPT-5.6 Sol / Terra / Luna | Current smoke targets. | Keep the AegisLoop local bridge route selected; record any built-in Codex handoff. |
+| GPT-6 Astra / Sol / Luna | Current smoke targets, not live-certified. | Keep the AegisLoop local bridge route selected; record any built-in Codex handoff. |
+| GPT-5.6 Sol / GPT-5.6 Terra / GPT-5.6 Luna | Previous-generation smoke targets. | The same route and token contract apply. |
 | GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Legacy smoke targets that should work if they write visible page text. | Do not claim support until a real smoke report exists for that exact mode. |
 | General chat models | Usually follow the fenced `codex` block contract after one clear instruction. | May summarize instead of emitting a block. Use the reformat nudge. |
 | Pro / reasoning modes | May overthink "use Codex" and look for a built-in tool. | Remind it that AegisLoop is page-text based, not a ChatGPT tool call. |
@@ -97,7 +109,7 @@ Use a harmless sample workspace.
 
 1. Start the local bridge.
 2. Open a fresh ChatGPT runner thread.
-3. Select the model you want to test, for example GPT-5.6 Sol, Terra, Luna, or a legacy 5.x mode.
+3. Select the model you want to test, for example GPT-6 Astra, Sol, Luna, or an available older mode.
 4. Keep the thread in **Chat Mode**.
 5. Paste the model brief below.
 6. Click **Use starter text**.
@@ -119,9 +131,9 @@ Test one axis at a time. Keep the same OS, browser, workspace, and thread while 
 | 4 | Advanced / 高级 | Checks stronger general mode behavior. |
 | 5 | Ultra / 超高 | Checks longer reasoning without tool-call confusion. |
 | 6 | Professional / 专业 | Checks professional/reasoning profile behavior. |
-| 7 | GPT-5.6 Sol | Checks the current coding-oriented target. |
-| 8 | GPT-5.6 Terra | Checks the current deeper-reasoning target. |
-| 9 | GPT-5.6 Luna | Checks the current broader model-family target. |
+| 7 | GPT-6 Astra | Checks visible protocol output with longer reasoning. |
+| 8 | GPT-6 Sol | Checks the same route on a different family member. |
+| 9 | GPT-6 Luna | Checks concise output and the same turn-token contract. |
 | 10 | GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Keeps legacy model coverage visible. |
 
 If one mode fails, rerun the same mode with the correction prompt before changing browser or OS.

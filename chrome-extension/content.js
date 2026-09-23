@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.23';
+  const CONTENT_VERSION = '0.3.24';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -1182,7 +1182,7 @@
             <li>Use starter text, then Arm one run.</li>
           </ol>
           <div class="tip">Use a dedicated runner thread. Switching GPT models keeps the same Codex route while the ChatGPT conversation URL stays the same.</div>
-          <div class="tip">Built-in Codex is a separate route. For this runner, keep AegisLoop selected and ask GPT-5.6 or another model for a visible codex JSON block.</div>
+          <div class="tip">Built-in Codex is a separate route. For this runner, keep AegisLoop selected and ask the current model for a visible codex JSON block.</div>
         </div>
         <div id="le-capsule" class="capsule">
           <div class="row"><span class="k">Capsule</span><span id="le-capsule-state" class="pill le-warn">legacy</span></div>

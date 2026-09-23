@@ -1,6 +1,7 @@
 'use strict';
 
 const API_TIMEOUT_MS = 8000;
+const RESULT_POLL_MS = 2500;
 let pageClientId = '';
 const state = {
   conversations: [],
@@ -15,6 +16,11 @@ const state = {
   maxLoopDispatches: 12,
   progressTimer: null,
   refreshing: false,
+  activeConversationId: '',
+  pausing: false,
+  bridgeError: '',
+  runError: '',
+  reconnecting: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -146,21 +152,31 @@ async function api(path, options = {}) {
       signal: controller.signal,
     });
     const text = await response.text();
-    let json = {};
+    let json;
     try {
-      json = text ? JSON.parse(text) : {};
+      json = JSON.parse(text);
     } catch {
-      json = { raw: text };
+      const error = new Error('invalid_bridge_response');
+      error.status = response.status;
+      throw error;
     }
-    if (!response.ok) {
+    if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('invalid_bridge_response');
+    if (!response.ok || json.ok === false || json.error) {
       const detail = json.error || json.message || json.status || text || response.statusText;
       const error = new Error(detail);
       error.status = response.status;
       error.body = json;
       throw error;
     }
+    if (options.method === 'POST' && path !== '/api/dispatch' && json.ok !== true) {
+      throw new Error('invalid_bridge_response');
+    }
     return json;
   } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      state.authenticated = false;
+      state.bridgeError = error.message;
+    }
     if (controller.signal.aborted) {
       const timeout = new Error('bridge_timeout');
       timeout.code = 'bridge_timeout';
@@ -178,12 +194,14 @@ function realConversations(conversations) {
       && c.codexSessionId
       && c.workspaceDir
       && !String(c.conversationId).startsWith('CONNECT_THIS_CHAT')
-      && !String(c.codexSessionId).startsWith('SET_CODEX_SESSION');
+      && !String(c.codexSessionId).startsWith('SET_CODEX_SESSION')
+      && ![c.conversationId, c.codexSessionId, c.workspaceDir].some(value => /YOUR_|REPLACE_WITH_/i.test(value));
   });
 }
 
 function selectedConversation() {
-  return state.conversations.find((c) => c.conversationId === state.selectedId) || state.conversations[0] || null;
+  return state.conversations.find((c) => c.conversationId === (state.activeConversationId || state.selectedId))
+    || (state.activeConversationId ? null : state.conversations[0]) || null;
 }
 
 function renderConversationOptions() {
@@ -193,7 +211,7 @@ function renderConversationOptions() {
   for (const conversation of state.conversations) {
     const option = document.createElement('option');
     option.value = conversation.conversationId;
-    option.textContent = shortWorkspace(conversation.workspaceDir);
+    option.textContent = `${shortWorkspace(conversation.workspaceDir)} (${conversation.conversationId.slice(0, 8)})`;
     select.append(option);
   }
   if (state.conversations.some((c) => c.conversationId === current)) {
@@ -216,8 +234,23 @@ function leaderAvailable(conversation) {
     || lease.clientId === clientIdFor();
 }
 
+function connectionFailureLabel() {
+  if (state.bridgeError === 'api_token_not_configured') return 'Setup required';
+  if (/unauthorized|auth_required|Session expired/i.test(state.bridgeError)) return 'Session expired';
+  return state.bridgeError === 'bridge_timeout' ? 'Bridge timeout' : 'Unavailable';
+}
+
 function renderStatus() {
   const c = selectedConversation();
+  const locked = state.running || state.recovering || state.pausing;
+  $('conversationSelect').disabled = locked || !state.conversations.length;
+  for (const id of ['promptInput', 'loopCount', 'allowEdits']) $(id).disabled = locked;
+  for (const button of document.querySelectorAll('.template')) button.disabled = locked;
+  $('pauseBtn').disabled = !c || !state.authenticated || !leaderAvailable(c) || state.pausing || state.recovering;
+  $('pauseBtn').textContent = state.pausing ? 'Pausing...' : 'Pause';
+  $('connectionDetail').textContent = state.bridgeError === 'api_token_not_configured'
+    ? 'API token is not configured.' : state.bridgeError || state.runError || '';
+  $('reconnectLink').hidden = !/unauthorized|auth_required|Session expired/i.test(state.bridgeError);
   if (!c) {
     $('modeText').textContent = '-';
     $('turnText').textContent = '-';
@@ -226,7 +259,8 @@ function renderStatus() {
     $('capsuleText').textContent = '-';
     $('sandboxText').textContent = '-';
     $('workspacePath').textContent = 'No registered AegisLoop conversation.';
-    setPill($('runStatus'), 'warn', 'No workspace');
+    setPill($('runStatus'), 'warn', state.authenticated ? 'No workspace' : connectionFailureLabel());
+    if (!state.bridgeError) $('connectionDetail').textContent = 'No configured conversation binding.';
     $('runBtn').disabled = true;
     $('runLoopBtn').disabled = true;
     renderRecoveryControls(null);
@@ -255,8 +289,15 @@ function renderStatus() {
   $('sandboxText').title = `Source: ${sandbox.source || 'unknown'}; configured: ${sandbox.configured === true ? 'yes' : 'no'}`;
 
   const canLead = leaderAvailable(c);
-  if (!canLead) {
+  if (!state.authenticated) {
+    setPill($('runStatus'), 'bad', connectionFailureLabel());
+  } else if (state.reconnecting) {
+    setPill($('runStatus'), 'warn', 'Reconnecting');
+  } else if (state.runError) {
+    setPill($('runStatus'), 'bad', 'Needs attention');
+  } else if (!canLead) {
     setPill($('runStatus'), 'warn', 'In use elsewhere');
+    $('connectionDetail').textContent = `Another tab holds this route for ${Math.max(1, Math.ceil((c.leaderLease.expiresAt - Date.now()) / 1000))}s.`;
   } else if (c.recoveryRequired) {
     setPill($('runStatus'), 'bad', 'Recovery required');
   } else if (c.hasPendingResult) {
@@ -269,15 +310,16 @@ function renderStatus() {
     setPill($('runStatus'), 'neutral', c.conversationMode || 'Idle');
   }
 
-  const runBlocked = !state.authenticated
-    || state.running
-    || !canLead
-    || !!c.recoveryRequired
-    || !!c.activeDispatchHash
-    || !!c.hasPendingResult;
+  const runBlocked = !canStartRun(c) || !$('promptInput').value.trim();
   $('runBtn').disabled = runBlocked;
   $('runLoopBtn').disabled = runBlocked;
   renderRecoveryControls(c);
+}
+
+function canStartRun(conversation) {
+  return !!conversation && state.authenticated && !state.running && !state.recovering && !state.pausing
+    && leaderAvailable(conversation) && !conversation.recoveryRequired && !conversation.activeDispatchHash
+    && !conversation.hasPendingResult && conversation.conversationMode !== 'running';
 }
 
 function renderRecoveryControls(conversation) {
@@ -307,8 +349,11 @@ async function refreshStatus(quiet = false) {
   try {
     const health = await api('/health');
     setPill($('bridgeStatus'), health.ok ? 'ok' : 'bad', health.ok ? 'Bridge online' : 'Bridge offline');
+    if (health.uiSessionAvailable === false) throw new Error('api_token_not_configured');
     const data = await api('/api/conversations');
+    if (!Array.isArray(data.conversations)) throw new Error('invalid_bridge_response');
     state.authenticated = true;
+    state.bridgeError = '';
     const configuredLimit = Number(data.controlPolicy && data.controlPolicy.armLoopMaxDispatches);
     state.maxLoopDispatches = Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 12;
     $('loopCount').max = String(state.maxLoopDispatches);
@@ -331,14 +376,10 @@ async function refreshStatus(quiet = false) {
     return true;
   } catch (error) {
     state.authenticated = false;
-    setPill($('bridgeStatus'), 'bad', 'Bridge error');
+    state.bridgeError = error.message;
+    if (error.message !== 'api_token_not_configured') setPill($('bridgeStatus'), 'bad', 'Bridge error');
     renderStatus();
-    const failureLabel = error.code === 'bridge_timeout'
-      ? 'Bridge timeout'
-      : error.status === 401
-        ? 'Session expired'
-        : 'Unavailable';
-    setPill($('runStatus'), 'bad', failureLabel);
+    setPill($('runStatus'), 'bad', connectionFailureLabel());
     if (!quiet) log(`Refresh failed: ${error.message}`);
     return false;
   } finally {
@@ -354,6 +395,7 @@ function applyTemplate(name) {
   $('promptInput').value = templates[name].prompt;
   $('allowEdits').checked = name === 'patch';
   renderEditPolicy();
+  renderStatus();
 }
 
 function renderEditPolicy() {
@@ -433,10 +475,11 @@ async function executeIteration(conversation, clientId, prompt, label, runId, au
     const reason = dispatch.rule || dispatch.status || 'unknown';
     throw new Error(`Dispatch did not start: ${reason}`);
   }
+  if (!dispatch.jobId) throw new Error('missing_dispatch_job_id');
 
   setPill($('runStatus'), 'warn', 'Waiting result');
   appendRunResult('waiting for Codex result...');
-  const result = await waitForResult(conversation.conversationId, clientId);
+  const result = await waitForResult(conversation.conversationId, clientId, dispatch.jobId);
   log(`${label}: result ${result.ok ? 'OK' : 'FAILED'} ${result.jobId || ''}`);
   appendRunResult(`\n[Codex -> GPT/UI]\n${result.ok ? 'OK' : 'FAILED'} job=${result.jobId || '-'} turn=${result.turn || '-'}\n\n${result.finalMessage || '(no final message)'}`);
 
@@ -451,6 +494,7 @@ async function executeIteration(conversation, clientId, prompt, label, runId, au
   });
   log(`${label}: acknowledged`);
   appendRunResult('\n[Bridge]\nacknowledged; this result is available as context for the next loop iteration.');
+  if (!result.ok) throw new Error('codex_run_failed');
   return {
     result,
     nextAuth: {
@@ -462,16 +506,19 @@ async function executeIteration(conversation, clientId, prompt, label, runId, au
 
 async function runSequence(maxRuns) {
   const c = selectedConversation();
-  if (!c) return;
-  const runId = `ui-${new Date().toISOString()}`;
-  const basePrompt = buildPrompt(`UI run id: ${runId}`);
-  if (!basePrompt.trim()) {
+  if (!canStartRun(c)) return;
+  if (!$('promptInput').value.trim()) {
     log('No task prompt to run.');
     return;
   }
+  const runId = `ui-${new Date().toISOString()}`;
+  const basePrompt = buildPrompt(`UI run id: ${runId}`);
 
   state.running = true;
+  state.activeConversationId = c.conversationId;
+  state.runError = '';
   state.cancelRequested = false;
+  renderStatus();
   $('runBtn').disabled = true;
   $('runLoopBtn').disabled = true;
   $('resultSubhead').textContent = maxRuns === 1
@@ -508,6 +555,7 @@ async function runSequence(maxRuns) {
     let previousResult = '';
     let completedRuns = 0;
     for (let i = 1; i <= maxRuns; i++) {
+      while (state.pausing) await new Promise(resolve => setTimeout(resolve, 100));
       if (state.cancelRequested) {
         log(`Loop paused before run ${i}.`);
         break;
@@ -542,10 +590,11 @@ async function runSequence(maxRuns) {
     void $('resultOutput').offsetWidth;
     $('resultOutput').classList.add('flash');
     appendRunResult(`\n# ${maxRuns === 1 ? 'Run complete' : `Loop complete: ${completedRuns}/${maxRuns} iteration${maxRuns === 1 ? '' : 's'}`}`);
-    $('resultSubhead').textContent = maxRuns === 1 ? 'Completed one run.' : `Loop completed ${completedRuns}/${maxRuns}.`;
+    $('resultSubhead').textContent = state.cancelRequested ? `Paused after ${completedRuns}/${maxRuns} runs.`
+      : maxRuns === 1 ? 'Completed one run.' : `Loop completed ${completedRuns}/${maxRuns}.`;
     finishProgress(true);
-    await refreshStatus(true);
   } catch (error) {
+    state.runError = error.message;
     finishProgress(false);
     setPill($('runStatus'), 'bad', 'Run failed');
     $('resultSubhead').textContent = 'Run failed.';
@@ -553,16 +602,40 @@ async function runSequence(maxRuns) {
     log(`Run failed: ${error.message}`);
   } finally {
     state.running = false;
+    state.activeConversationId = '';
+    await refreshStatus(true);
     renderStatus();
   }
 }
 
-async function waitForResult(conversationId, clientId) {
+async function waitForResult(conversationId, clientId, jobId) {
   const started = Date.now();
+  let failures = 0;
   while (Date.now() - started < 30 * 60 * 1000) {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const response = await api(`/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=${encodeURIComponent(clientId)}`);
-    if (response.hasResult && response.result) return response.result;
+    await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
+    try {
+      const response = await api(`/api/result?conversationId=${encodeURIComponent(conversationId)}&clientId=${encodeURIComponent(clientId)}`);
+      if (typeof response.hasResult !== 'boolean') throw new Error('invalid_bridge_response');
+      failures = 0;
+      state.reconnecting = false;
+      if (response.hasResult) {
+        if (!response.result || !response.result.resultId || !jobId || response.result.jobId !== jobId) {
+          throw new Error('result_job_mismatch');
+        }
+        return response.result;
+      }
+    } catch (error) {
+      const transient = error.code === 'bridge_timeout' || error.name === 'TypeError'
+        || [502, 503, 504].includes(error.status);
+      // Retry result reads only. An uncertain dispatch/ACK must never be replayed here.
+      if (!transient || ++failures > 3) {
+        state.reconnecting = false;
+        throw error;
+      }
+      state.reconnecting = true;
+      setPill($('runStatus'), 'warn', 'Reconnecting');
+      log(`Result read interrupted (${failures}/3). Retrying without dispatching again.`);
+    }
   }
   throw new Error('Timed out waiting for Codex result.');
 }
@@ -598,9 +671,11 @@ async function recoverPendingResult() {
       throw new Error('Pending resultId changed during recovery. Refresh before acknowledging.');
     }
     state.recoveredPending = { conversationId: conversation.conversationId, result };
+    state.runError = '';
     renderRecoveredResult(result);
     log(`Recovered pending result ${result.resultId}.`);
   } catch (error) {
+    state.runError = error.message;
     log(error.status === 401
       ? 'UI session expired. Reopen /ui/ to recover the pending result.'
       : `Result recovery failed: ${error.message}`);
@@ -635,11 +710,13 @@ async function completeRecoveredResult(action) {
       ? `Acknowledged recovered result ${result.resultId}.`
       : `Kept recovered result ${result.resultId} pending and paused the loop.`);
     state.recoveredPending = null;
+    state.runError = '';
     $('resultSubhead').textContent = action === 'ack'
       ? 'Recovered result acknowledged.'
       : 'Recovered result remains pending.';
     await refreshStatus(true);
   } catch (error) {
+    state.runError = error.message;
     log(`Recovered result ${action.toUpperCase()} failed: ${error.message}`);
   } finally {
     state.recovering = false;
@@ -649,8 +726,9 @@ async function completeRecoveredResult(action) {
 
 async function pauseConversation() {
   const c = selectedConversation();
-  if (!c) return;
-  state.cancelRequested = true;
+  if (!c || !state.authenticated || state.pausing || state.recovering || !leaderAvailable(c)) return;
+  state.pausing = true;
+  renderStatus();
   try {
     await api('/api/mode', {
       method: 'POST',
@@ -661,10 +739,15 @@ async function pauseConversation() {
         reason: 'ui_pause',
       },
     });
+    state.cancelRequested = true;
     log(state.running ? 'Pause requested. Current run may finish before the loop stops.' : 'Paused conversation.');
     await refreshStatus(true);
   } catch (error) {
+    state.runError = error.message;
     log(`Pause failed: ${error.message}`);
+  } finally {
+    state.pausing = false;
+    renderStatus();
   }
 }
 
@@ -677,7 +760,12 @@ async function copyResult() {
 function bindEvents() {
   $('refreshBtn').addEventListener('click', () => refreshStatus(false));
   $('conversationSelect').addEventListener('change', (event) => {
+    if (state.running || state.recovering || state.pausing) {
+      event.target.value = state.activeConversationId || state.selectedId;
+      return;
+    }
     state.selectedId = event.target.value;
+    state.runError = '';
     state.recoveredPending = null;
     renderStatus();
   });
@@ -695,6 +783,7 @@ function bindEvents() {
     button.addEventListener('click', () => applyTemplate(button.dataset.template));
   }
   $('allowEdits').addEventListener('change', renderEditPolicy);
+  $('promptInput').addEventListener('input', renderStatus);
 }
 
 async function init() {

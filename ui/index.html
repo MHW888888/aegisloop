@@ -11,14 +11,18 @@
   <div class="shell">
     <header class="topbar">
       <div>
-        <div class="eyebrow">AegisLoop local control</div>
-        <h1>Workspace Console</h1>
+        <div class="eyebrow">Local Codex control</div>
+        <h1>AegisLoop</h1>
       </div>
       <div class="status-strip" aria-live="polite">
         <span id="bridgeStatus" class="pill neutral">Checking bridge</span>
         <span id="runStatus" class="pill neutral">Idle</span>
       </div>
     </header>
+    <div class="connection-status" role="status">
+      <span id="connectionDetail"></span>
+      <a id="reconnectLink" href="/ui/" hidden>Reconnect session</a>
+    </div>
 
     <main class="layout">
       <section class="workspace-panel" aria-label="Workspace and task controls">
@@ -109,7 +113,7 @@
             <button id="runLoopBtn" class="primary subtle" type="button">
               <span class="button-label">Run loop</span>
             </button>
-            <button id="pauseBtn" class="secondary" type="button">Pause</button>
+            <button id="pauseBtn" class="secondary" type="button" title="Stop further iterations; the current Codex task may still finish">Pause</button>
           </div>
         </div>
       </section>

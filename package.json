@@ -1,8 +1,8 @@
 {
   "name": "aegisloop",
-  "version": "0.3.23",
+  "version": "0.3.24",
   "private": false,
-  "description": "A guarded control plane for explicit ChatGPT-to-local-Codex execution.",
+  "description": "Local Codex control with bounded runs, crash recovery, and auditable results. Optional ChatGPT bridge.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -43,7 +43,10 @@
     "automation",
     "local-first",
     "chrome-extension",
-    "agentic-workflow"
+    "agentic-workflow",
+    "crash-recovery",
+    "audit-trail",
+    "human-in-the-loop"
   ],
   "license": "MIT"
 }

@@ -9,15 +9,20 @@ const { chromium } = require('playwright');
 const ROOT = path.resolve(__dirname, '..');
 
 async function main() {
-  const result = { resultId: 'result-browser', jobId: 'job-browser', turn: 1, ok: true, finalMessage: 'Sample inspection complete.' };
+  let result = { resultId: 'result-browser', jobId: 'job-browser', turn: 1, ok: true, finalMessage: 'Sample inspection complete.' };
   const conversation = {
     conversationId: 'conversation-browser', codexSessionId: 'session-browser',
     workspaceDir: '/sample/workspace', conversationMode: 'chat', loopState: 'paused',
     hasPendingResult: true, pendingResultId: result.resultId, leaderLease: null,
   };
   let authenticated = true;
+  let uiSessionAvailable = true;
   let ackCount = 0;
   let dispatchCount = 0;
+  let resultReadFailures = 0;
+  let holdForPause = false;
+  const pauses = [];
+  const secondConversation = { ...conversation, conversationId: 'second-route', hasPendingResult: false, pendingResultId: null };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const json = (status, body) => {
@@ -31,9 +36,9 @@ async function main() {
       res.end(fs.readFileSync(path.join(ROOT, 'ui', files[url.pathname])));
       return;
     }
-    if (url.pathname === '/health') return json(200, { ok: true });
+    if (url.pathname === '/health') return json(200, { ok: true, uiSessionAvailable });
     if (!authenticated) return json(401, { error: 'auth_required' });
-    if (url.pathname === '/api/conversations') return json(200, { conversations: [conversation] });
+    if (url.pathname === '/api/conversations') return json(200, { conversations: [conversation, secondConversation] });
     let body = '';
     for await (const chunk of req) body += chunk;
     const payload = body ? JSON.parse(body) : {};
@@ -43,14 +48,34 @@ async function main() {
       return json(409, { ok: false, status: 'leader_conflict' });
     }
     conversation.leaderLease = { clientId, expiresAt: Date.now() + 15000 };
-    if (url.pathname === '/api/result') return json(200, { hasResult: conversation.hasPendingResult, result });
+    if (url.pathname === '/api/result') {
+      if (resultReadFailures > 0) { resultReadFailures--; return json(503, { error: 'temporary_unavailable' }); }
+      if (holdForPause && pauses.length === 0) return json(200, { hasResult: false });
+      return json(200, { hasResult: conversation.hasPendingResult, result });
+    }
     if (url.pathname === '/api/result/ack') {
       assert.equal(payload.resultId, result.resultId);
       ackCount += 1;
       conversation.hasPendingResult = false;
-      return json(200, { ok: true, hasPendingResult: false });
+      conversation.conversationMode = 'chat';
+      return json(200, { ok: true, hasPendingResult: false, armId: 'arm-ui', turnNonce: 'next-turn' });
     }
-    if (url.pathname === '/api/dispatch') dispatchCount += 1;
+    if (url.pathname === '/api/mode') {
+      if (payload.action === 'chat') pauses.push(payload.conversationId);
+      conversation.conversationMode = payload.action === 'chat' ? 'chat' : 'armed';
+      return json(200, { ok: true, armId: 'arm-ui', turnNonce: 'turn-ui' });
+    }
+    if (url.pathname === '/api/dispatch') {
+      assert.equal(payload.conversationId, conversation.conversationId);
+      assert.equal(payload.armId, 'arm-ui');
+      assert.equal(payload.turnNonce, 'turn-ui');
+      dispatchCount += 1;
+      result = { ...result, resultId: `run-result-${dispatchCount}`, jobId: `run-job-${dispatchCount}` };
+      conversation.pendingResultId = result.resultId;
+      conversation.hasPendingResult = true;
+      conversation.conversationMode = 'running';
+      return json(200, { status: 'accepted', jobId: result.jobId });
+    }
     return json(404, { error: 'unexpected_fixture_request' });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -113,6 +138,57 @@ async function main() {
     await page.waitForFunction(() => document.getElementById('pendingText').textContent === 'no');
     assert.equal(ackCount, 1, 'reload must not acknowledge or deliver again');
     assert.equal(dispatchCount, 0, 'recovery must never re-execute a task');
+
+    conversation.leaderLease = null;
+    await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+    await page.waitForFunction(() => !document.getElementById('runBtn').disabled);
+    await page.locator('#promptInput').fill('   ');
+    assert.equal(await page.locator('#runBtn').isDisabled(), true);
+    await page.locator('#promptInput').fill('Inspect the sample workspace without changing files.');
+    resultReadFailures = 1;
+    await page.getByRole('button', { name: 'Run once', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('runStatus').textContent === 'Waiting result');
+    assert.equal(await page.locator('#conversationSelect').isDisabled(), true);
+    assert.equal(await page.locator('#promptInput').isDisabled(), true);
+    await page.evaluate(() => {
+      const select = document.getElementById('conversationSelect');
+      select.value = 'second-route';
+      select.dispatchEvent(new Event('change'));
+    });
+    assert.equal(await page.locator('#conversationSelect').inputValue(), conversation.conversationId);
+    await page.waitForFunction(() => document.getElementById('activityLog').textContent.includes('Retrying without dispatching again'));
+    await page.waitForFunction(() => !state.running && document.getElementById('runStatus').textContent === 'Ready');
+    assert.equal(dispatchCount, 1, 'transient result read failure must not repeat dispatch');
+    assert.equal(ackCount, 2);
+
+    await page.locator('#loopCount').fill('2');
+    holdForPause = true;
+    await page.getByRole('button', { name: 'Run loop', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('runStatus').textContent === 'Waiting result');
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+    await page.waitForFunction(() => !state.running);
+    assert.deepEqual(pauses, [conversation.conversationId]);
+    assert.equal(dispatchCount, 2, 'Pause must stop the next iteration on the active route');
+    assert.match(await page.locator('#resultSubhead').textContent(), /Paused after 1\/2/);
+
+    // Validate real responsive layout and optionally retain sanitized fixture screenshots.
+    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 640 }]) {
+      await page.setViewportSize(viewport);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'page must not overflow horizontally');
+      for (const id of ['runBtn', 'runLoopBtn', 'pauseBtn']) {
+        assert.equal(await page.locator(`#${id}`).evaluate(el => el.scrollWidth <= el.clientWidth), true, `${id}: text must fit`);
+      }
+      if (process.env.AEGISLOOP_SCREENSHOT_DIR) {
+        fs.mkdirSync(process.env.AEGISLOOP_SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.AEGISLOOP_SCREENSHOT_DIR, `console-${viewport.width}.png`), fullPage: true });
+      }
+    }
+    uiSessionAvailable = false;
+    await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('runStatus').textContent === 'Setup required');
+    assert.equal(await page.locator('#bridgeStatus').textContent(), 'Bridge online');
+    assert.equal(await page.locator('#runBtn').isDisabled(), true);
+    assert.equal(await page.locator('#reconnectLink').isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(`UI browser recovery checks passed (${process.env.AEGISLOOP_TEST_BROWSER || 'chromium'} ${browser.version()})`);
   } finally {

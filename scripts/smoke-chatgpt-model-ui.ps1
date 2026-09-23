@@ -1,7 +1,7 @@
 param(
   [string]$CdpUrl = "http://127.0.0.1:9222",
   [string]$OutDir = "output/chatgpt-model-smoke",
-  [string[]]$Models = @("Balanced", "Smart", "Fast", "Advanced", "Ultra", "Professional", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5", "GPT-5.4", "GPT-5.3", "o3"),
+  [string[]]$Models = @("GPT-6 Astra", "GPT-6 Sol", "GPT-6 Luna", "Balanced", "Smart", "Fast", "Advanced", "Ultra", "Professional", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna"),
   [switch]$SelfCheck
 )
 
@@ -187,7 +187,7 @@ async function clickByText(client, patternSource, exactText = null) {
 }
 
 async function openModelMenu(client) {
-  const clicked = await clickByText(client, '\\u6A21\\u578B\\u9009\\u62E9\\u5668|model selector|ChatGPT|\\u667A\\u80FD|\\u6781\\u901F|\\u5747\\u8861|\\u9AD8\\u7EA7|\\u8D85\\u9AD8|\\u4E13\\u4E1A|GPT-5');
+  const clicked = await clickByText(client, '\\u6A21\\u578B\\u9009\\u62E9\\u5668|model selector|ChatGPT|\\u667A\\u80FD|\\u6781\\u901F|\\u5747\\u8861|\\u9AD8\\u7EA7|\\u8D85\\u9AD8|\\u4E13\\u4E1A|GPT-[0-9]|Astra');
   if (clicked.ok) await sleep(700);
   return clicked;
 }
@@ -220,8 +220,8 @@ async function chooseModel(client, model) {
     }
   }
 
-  if (/^GPT-5\\.|^o3$/i.test(model)) {
-    const parent = await clickByText(client, 'GPT-5\\.5|GPT-5|model');
+  if (/^GPT-\d|^o3$/i.test(model)) {
+    const parent = await clickByText(client, 'GPT-[0-9]|Astra|model');
     if (!parent.ok && hasBrowserChallenge(parent.available)) {
       return { ok: false, reason: 'browser_challenge', parent };
     }

@@ -59,7 +59,7 @@ assert.match(content, /tool-availability disclaimer/, 'contract must prevent Pro
 assert.match(content, /Pro or reasoning model/, 'starter text must handle Pro/reasoning modes');
 assert.match(content, /Switching GPT models keeps the same Codex route/, 'panel must explain model switching is route-neutral');
 assert.match(content, /Built-in Codex is a separate route/, 'panel must explain built-in Codex coexistence');
-assert.match(content, /keep AegisLoop selected and ask GPT-5\.6 or another model for a visible codex JSON block/, 'panel must tell users to keep the AegisLoop route');
+assert.match(content, /keep AegisLoop selected and ask the current model for a visible codex JSON block/, 'panel must keep the route model-independent');
 assert.match(content, /LE\.codexSessionId = me\.codexSessionId \|\| LE\.codexSessionId/, 'panel route display must refresh Codex session id from bridge state');
 assert.match(content, /LE\.workspaceDir = me\.workspaceDir \|\| LE\.workspaceDir/, 'panel route display must refresh workspace from bridge state');
 assert.match(content, /LE\.fullAuto = me\.fullAuto !== false/, 'panel route display must refresh automation flag from bridge state');
