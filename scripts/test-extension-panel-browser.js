@@ -106,7 +106,8 @@ async function main() {
   try {
     browser = await chromium.launch({ headless: true,
       ...(process.env.AEGISLOOP_TEST_BROWSER ? { channel: process.env.AEGISLOOP_TEST_BROWSER } : {}) });
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 },
+      deviceScaleFactor: process.env.AEGISLOOP_SCREENSHOT_DIR ? 2 : 1 });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('dialog', dialog => dialog.dismiss());
@@ -206,7 +207,14 @@ async function main() {
     assert.ok((await page.locator('#le-panel').boundingBox()).x > 900);
 
     const screenshotDir = process.env.AEGISLOOP_SCREENSHOT_DIR;
-    if (screenshotDir) fs.mkdirSync(screenshotDir, { recursive: true });
+    if (screenshotDir) {
+      fs.mkdirSync(screenshotDir, { recursive: true });
+      await page.locator('#le-panel-body').evaluate(el => { el.scrollTop = 0; });
+      await page.locator('#le-panel').screenshot({ path: path.join(screenshotDir, 'panel-expanded.png') });
+      await page.locator('#le-collapse').click();
+      await page.locator('#le-panel').screenshot({ path: path.join(screenshotDir, 'panel-minimized.png') });
+      await page.locator('#le-collapse').click();
+    }
     for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 600 }, { width: 320, height: 480 }, { width: 600, height: 260 }]) {
       await page.setViewportSize(viewport);
       await page.waitForFunction(() => {

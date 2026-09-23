@@ -15,15 +15,23 @@ Codex is available directly in ChatGPT, the desktop app, editors, and the termin
 
 ## Quick Demo
 
-![AegisLoop local console](docs/assets/aegisloop-console-demo.png)
+### Local Console
 
-Local console v0.3.24, captured from the real-browser test with synthetic workspace and result data. This demonstrates the UI, not a live model run.
+![AegisLoop v0.3.25 local console](docs/assets/aegisloop-console-v0.3.25.png)
 
-> Static screenshot of the Chrome extension panel (general panel overview / first demo screenshot). It is a sanitized onboarding image, so the version number and minor labels may lag behind the latest release. Key runtime states such as Chat Mode, Arm one run, Codex running, Needs approval, and Frozen will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
+### Browser Extension
 
-![AegisLoop demo](docs/assets/aegisloop-panel-demo.png)
+<table>
+  <tr><th>Expanded</th><th>Minimized</th></tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/aegisloop-panel-v0.3.25.png" alt="AegisLoop v0.3.25 expanded panel with folded settings and run controls" width="320"></td>
+    <td valign="top"><img src="docs/assets/aegisloop-panel-minimized-v0.3.25.png" alt="AegisLoop v0.3.25 minimized panel with status and Pause" width="260"></td>
+  </tr>
+</table>
 
-The extension panel exposes the local bridge status, briefing tools, chat mode controls, and the arm/freeze workflow used to safely start automation.
+Move or minimize the panel without changing the execution route. Minimized mode retains status and Pause; minimizing alone does not stop automation.
+
+Captured from v0.3.25 in real Chrome using synthetic test data. These images show the shipped UI, not a live model run. No private conversation or credentials are included.
 
 ![AegisLoop architecture](docs/architecture.svg)
 
