@@ -1,5 +1,17 @@
 # Troubleshooting
 
+## Console Connection and Run Status
+
+- `Session expired`: use **Reconnect session** to reload the local `/ui/` surface and obtain a new same-origin session. Reload creates a new tab identity; the previous lease may take 15 seconds to expire.
+- `Reconnecting`: the console is retrying a result read, not dispatching the task again. After three failed retries, the transcript retains the error. Restore the bridge, refresh status, then recover any pending result.
+- `Needs attention`: the last run or control failed. Inspect the displayed error and transcript; a successful health check does not mean the failed action succeeded. A fresh run or changing routes clears the old local error.
+- `In use elsewhere`: another tab holds the route. Its remaining lease time is shown; close the duplicate controller or wait. Do not force a second run.
+- `No workspace`: example `YOUR_*` bindings are not executable routes. Complete local setup and confirm `npm run doctor` before trying again.
+- `invalid_bridge_response`: the response was not a valid success envelope. Check that the port belongs to AegisLoop, not another local service or proxy.
+- `result_job_mismatch`: a returned result belongs to a different job. It was not ACKed. Refresh status and inspect the pending result using Recover.
+
+The route selector and task inputs lock during a run. **Pause** stops subsequent iterations on that route; it does not claim to kill an already running Codex task. Control writes are never automatically retried after an uncertain response.
+
 ## One-command bridge check
 
 Run this before debugging the browser panel:

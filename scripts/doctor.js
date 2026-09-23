@@ -199,7 +199,7 @@ function print() {
   console.log(`Summary: ${failCount} fail, ${warnCount} warn`);
   console.log('');
   console.log('Compatibility help: docs/compatibility-matrix.md separates OS, browser, ChatGPT DOM, model, and local Codex executor issues.');
-  console.log("If GPT-5.6 or another model starts built-in Codex or cannot find the tool, see docs/codex-coexistence.md and docs/model-compatibility.md.");
+  console.log("If the current model starts built-in Codex or cannot find the tool, see docs/codex-coexistence.md and docs/model-compatibility.md.");
   if (failCount) process.exitCode = 1;
 }
 

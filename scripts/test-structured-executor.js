@@ -55,6 +55,15 @@ assert.deepStrictEqual(structured.buildArgs('session-1', '-'), [
   '-',
 ]);
 
+for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+  const adapter = createExecutorAdapter({ ...codex, args: ['exec', 'resume', '--model', model] }, {
+    execResume: true, json: true, outputSchema: true,
+  }, schema);
+  assert.deepStrictEqual(adapter.buildArgs('same-session', '-'), [
+    'exec', 'resume', '--model', model, '--json', '--output-schema', schema, 'same-session', '-',
+  ], 'model selection must preserve session identity and structured output flags');
+}
+
 const legacy = createExecutorAdapter(codex, {
   execResume: true,
   json: false,

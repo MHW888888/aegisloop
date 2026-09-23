@@ -6,14 +6,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this for model-specific behavior such as "GPT-5.6 started built-in Codex instead of returning a visible block" or "5.5 emits a valid codex block".
+        Use this for model-specific behavior such as "GPT-6 Astra started built-in Codex instead of returning a visible block" or a valid visible codex block.
 
         Please do not post tokens, real conversation ids, private local paths, screenshots with secrets, ads, payment links, or wallet addresses.
   - type: input
     id: model
     attributes:
       label: Model / mode tested
-      placeholder: "Example: GPT-5.6 Sol, Terra, Luna, Ultra, GPT-5.5, GPT-5.4, GPT-5.3, o3"
+      placeholder: "Example: GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, Ultra"
     validations:
       required: true
   - type: dropdown

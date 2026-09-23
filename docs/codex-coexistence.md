@@ -33,11 +33,11 @@ Execution route: AegisLoop local bridge
 
 If the model starts built-in Codex or discusses tool availability, keep the same conversation and repeat the runner prompt. Model switching does not change the local route while the ChatGPT conversation URL remains the same.
 
-## GPT-5.6
+## Current and Older Models
 
-GPT-5.6 Sol, Terra, and Luna are compatibility smoke targets. AegisLoop does not depend on a private model tool call; it depends on visible page text that follows the fenced JSON contract.
+GPT-6 Astra, Sol, and Luna are current compatibility smoke targets. GPT-5.6 Sol, Terra, and Luna remain older targets. AegisLoop does not depend on a private model tool call; it depends on visible page text that follows the fenced JSON contract.
 
-Do not claim a GPT-5.6 mode is verified until a real signed-in browser smoke report confirms:
+Do not claim an exact model or mode is verified until a real signed-in browser smoke report confirms:
 
 1. the same ChatGPT conversation remains open;
 2. the same local Codex binding remains visible;
@@ -56,4 +56,4 @@ AegisLoop 面向的是更具体的场景：让一个专用 ChatGPT 执行线程�
 - 想继续指定的本地 Codex session，并需要显式 Arm、隔离、恢复和审计时，使用 AegisLoop。
 - 切换 GPT 模型不会改变 AegisLoop 绑定；只有 ChatGPT conversation URL、配置或显式重连发生变化时才改变路线。
 
-GPT-5.6 Sol、Terra、Luna 目前是兼容性测试目标。没有真实登录态 smoke report 前，不宣称已经全部验证通过。
+GPT-6 Astra、Sol、Luna 是当前兼容性测试目标；GPT-5.6 保留为旧版本回归目标。没有真实登录态 smoke report 前，不宣称已经全部验证通过。项目定位是“Codex 本地执行控制、恢复与审计”，不是另一个模型入口。

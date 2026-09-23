@@ -5,15 +5,19 @@
 [![Local-first](https://img.shields.io/badge/local--first-yes-blue)](#safety-model)
 [![Guarded autonomy](https://img.shields.io/badge/guarded-autonomy-purple)](#why-aegisloop)
 
-> **A guarded control plane for explicit ChatGPT-to-local-Codex execution.**
+> **Local Codex control. Bounded runs. Recoverable results.**
 
-AegisLoop binds one ChatGPT conversation to one local Codex session. ChatGPT produces a visible next-step instruction, Codex runs it in your workspace, and AegisLoop carries the result back through explicit arming, workspace locks, recoverable delivery, and audit logs.
+AegisLoop adds explicit run controls, crash recovery, result acknowledgements, and local audit logs around Codex. Use the local workspace console directly, or bind one ChatGPT conversation to one local Codex session through the optional browser extension.
 
-Codex is now available directly in ChatGPT, the desktop app, editors, and the terminal. AegisLoop does not replace those surfaces. It is for users who specifically want a browser-thread-driven local loop with an inspectable execution route and local fail-closed controls.
+Codex is available directly in ChatGPT, the desktop app, editors, and the terminal. AegisLoop does not replace those surfaces. It is for users who want bounded local runs with an inspectable execution route and explicit recovery controls.
 
 > AegisLoop is a personal automation bridge. It is not an official OpenAI product.
 
 ## Quick Demo
+
+![AegisLoop local console](docs/assets/aegisloop-console-demo.png)
+
+Local console v0.3.24, captured from the real-browser test with synthetic workspace and result data. This demonstrates the UI, not a live model run.
 
 > Static screenshot of the Chrome extension panel (general panel overview / first demo screenshot). It is a sanitized onboarding image, so the version number and minor labels may lag behind the latest release. Key runtime states such as Chat Mode, Arm one run, Codex running, Needs approval, and Frozen will be documented in detail in subsequent updates. No real conversation IDs, tokens, local paths, or private workspace data are shown.
 
@@ -33,18 +37,21 @@ You can help without writing code. The most useful reports are small browser / m
 
 Please do not include real conversation IDs, tokens, local private paths, private workspace names, or private project content.
 
-## AegisLoop Lite
+## Choose Your Route
 
-Version `v0.2.0` focuses on first-run clarity:
+| Route | Best fit | Execution identity |
+| --- | --- | --- |
+| Local console (`npm run open:ui`) | Inspect a task, run a bounded loop, recover a pending result | Configured local Codex session |
+| Chrome extension | Let a ChatGPT conversation produce visible next-step instructions | One conversation bound to one local session |
+| Built-in Codex | Native chat, tools, approvals, and agent workflows | Managed by Codex; separate from the AegisLoop route |
 
-- friendlier extension labels;
-- a shorter setup path;
-- beginner docs for common failures;
-- clearer README positioning.
+GPT-6 Astra, Sol, and Luna are now included in the model smoke targets. Model selection does not change AegisLoop's conversation binding. This is not a claim that every logged-in ChatGPT model has passed live testing: see [model compatibility](docs/model-compatibility.md) and [positioning and alternatives](docs/positioning.md).
 
-The goal: understand it in 30 seconds, run a first local loop in about 3 minutes.
+## Current Focus: v0.3.24 Connection and Run Clarity
 
-## Current Focus: v0.3.23 Console Recovery Checks
+The console locks the selected route and task controls during execution, rejects empty tasks and example bindings, and keeps Pause bound to the active conversation. Brief result-read failures get at most three retries without re-dispatching; authority errors stop immediately. Results must match the accepted job before ACK. Failed or malformed bridge replies no longer count as successful controls, and failure state remains visible after a status refresh.
+
+Desktop and narrow-screen controls have more room, expired sessions get a reconnect link, and a competing tab's lease is visible. The real browser fixture covers execution, a transient 503, Pause, refresh recovery, and 320/390/1280-pixel layouts. No permissions were broadened.
 
 The optional local console and Chrome extension now create a fresh identity for each page instance, including copied tabs and reloads. This prevents copied browser storage from duplicating leader authority. After a console reload, wait for the previous lease to expire (15 seconds by default), then recover the pending result. Recovery never automatically re-executes the task.
 

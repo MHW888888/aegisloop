@@ -53,6 +53,8 @@ button:disabled {
 }
 
 .shell {
+  display: flex;
+  flex-direction: column;
   width: min(1440px, calc(100vw - 32px));
   height: 100vh;
   margin: 0 auto;
@@ -72,7 +74,7 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -84,7 +86,7 @@ p {
 
 h1 {
   margin-top: 2px;
-  font-size: clamp(22px, 2.8vw, 30px);
+  font-size: 28px;
   line-height: 1.05;
   letter-spacing: 0;
 }
@@ -142,9 +144,22 @@ h2 {
   grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
-  height: calc(100vh - 86px);
+  flex: 1;
   min-height: 0;
 }
+
+.connection-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 24px;
+  margin-bottom: 6px;
+  color: var(--red);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.connection-status a { color: var(--accent-strong); }
 
 .workspace-panel,
 .result-panel {
@@ -258,7 +273,7 @@ h2 {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -413,6 +428,7 @@ textarea:focus {
 
 .prompt-field {
   flex: 1;
+  grid-template-rows: auto minmax(80px, 1fr);
   min-height: 88px;
 }
 
@@ -430,7 +446,7 @@ textarea:focus {
 
 .run-bar {
   display: grid;
-  grid-template-columns: minmax(160px, 176px) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 6px;
   align-items: end;
 }
@@ -503,6 +519,7 @@ textarea:focus {
   font-size: 13px;
   line-height: 1.55;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .result-output.flash {
@@ -546,6 +563,7 @@ textarea:focus {
   background: #fbfcfe;
   color: var(--muted);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .activity-log time {
@@ -585,6 +603,13 @@ textarea:focus {
 }
 
 @media (max-width: 520px) {
+  .result-panel > .section-head {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .result-actions { justify-content: start; }
+
   .template-list,
   .meta-grid,
   .actions,

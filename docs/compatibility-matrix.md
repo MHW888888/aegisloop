@@ -22,7 +22,7 @@ ChatGPT conversationId -> AegisLoop binding -> local Codex session / Run Capsule
 
 Model choice is only a generation behavior. It is not a routing key.
 
-If the same ChatGPT conversation switches from Balanced to Ultra, Professional, GPT-5.6 Sol/Terra/Luna, or a legacy GPT-5.x/o3 target, AegisLoop should keep the same bound Codex session and capsule. Rebinding is needed only when the ChatGPT conversation URL changes, the maintainer changes `config.json`, or the user explicitly reconnects the tab.
+If the same ChatGPT conversation switches between GPT-6 Astra/Sol/Luna, reasoning profiles, or older models, AegisLoop should keep the same bound Codex session and capsule. Rebinding is needed only when the ChatGPT conversation URL changes, the maintainer changes `config.json`, or the user explicitly reconnects the tab.
 
 Smooth switching target:
 
@@ -76,9 +76,10 @@ The model menu is not a transport layer. It should never decide the local Codex 
 | Advanced / 高级 | Smoke target | Should follow the normal contract after clear briefing. |
 | Ultra / 超高 | Smoke target | May over-reason and look for tool access. |
 | Professional / 专业 | Smoke target | Treat as a reasoning/pro profile until tested. |
-| GPT-5.6 Sol | Current exact-mode smoke target | Need one real report before claiming support. |
-| GPT-5.6 Terra | Current exact-mode smoke target | Need one real report before claiming support. |
-| GPT-5.6 Luna | Current exact-mode smoke target | Need one real report before claiming support. |
+| GPT-6 Astra | Current exact-mode smoke target | CLI argument preservation tested; logged-in output compliance unverified. |
+| GPT-6 Sol | Current exact-mode smoke target | CLI argument preservation tested; logged-in output compliance unverified. |
+| GPT-6 Luna | Current exact-mode smoke target | CLI argument preservation tested; logged-in output compliance unverified. |
+| GPT-5.6 Sol / GPT-5.6 Terra / GPT-5.6 Luna | Previous-generation smoke targets | Need one real report before claiming support. |
 | GPT-5.5 / GPT-5.4 / GPT-5.3 / o3 | Legacy exact-mode smoke targets | Keep regression reports, but prioritize current modes. |
 | Standard chat models | Usually compatible | May summarize instead of producing a `codex` block. |
 | Faster / smaller models | Usually compatible for small tasks | May produce underspecified prompts. |

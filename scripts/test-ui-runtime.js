@@ -72,9 +72,10 @@ function loadApp({ sessionStore = storage(), fetchImpl, timeoutMs = 30 } = {}) {
   };
   const source = fs.readFileSync(APP_PATH, 'utf8')
     .replace('const API_TIMEOUT_MS = 8000;', `const API_TIMEOUT_MS = ${timeoutMs};`)
+    .replace('const RESULT_POLL_MS = 2500;', 'const RESULT_POLL_MS = 1;')
     .replace(/\ninit\(\);\s*$/, [
       '',
-      'globalThis.__aegisUiTest = { clientIdFor, api, refreshStatus, shortWorkspace, state, renderStatus, completeRecoveredResult };',
+      'globalThis.__aegisUiTest = { clientIdFor, api, refreshStatus, shortWorkspace, state, renderStatus, completeRecoveredResult, realConversations, runSequence, pauseConversation, waitForResult };',
       '',
     ].join('\n'));
   const context = {
@@ -182,6 +183,76 @@ async function main() {
     fetchImpl: async () => jsonResponse({ ok: false, status: 'leader_conflict' }, 409),
   });
   await assert.rejects(conflict.api('/api/result/ack'), /leader_conflict/);
+
+  for (const body of [{ ok: false, status: 'leader_conflict' }, {}, [], null]) {
+    const invalid = loadApp({ fetchImpl: async () => jsonResponse(body) });
+    await assert.rejects(invalid.api('/api/mode', { method: 'POST', body: {} }), /leader_conflict|invalid_bridge_response/);
+  }
+  const malformed = loadApp({ fetchImpl: async () => ({ ok: true, status: 200, text: async () => '<html>proxy</html>' }) });
+  await assert.rejects(malformed.api('/health'), /invalid_bridge_response/);
+  assert.strictEqual(tabA.realConversations([{
+    conversationId: 'YOUR_CHATGPT_CONVERSATION_ID', codexSessionId: 'YOUR_CODEX_SESSION_ID', workspaceDir: '/YOUR_WORKSPACE',
+  }]).length, 0, 'example bindings must not appear ready');
+
+  const configured = { conversationId: 'route-a', codexSessionId: 'session-a', workspaceDir: '/sample', conversationMode: 'chat' };
+  let readAttempts = 0;
+  const retry = loadApp({ fetchImpl: async (requestPath, options) => {
+    assert.strictEqual(options.method, 'GET');
+    assert.match(requestPath, /conversationId=route-a/);
+    if (++readAttempts === 1) throw new TypeError('Failed to fetch');
+    return jsonResponse({ hasResult: true, result: { resultId: 'r1', jobId: 'j1', ok: true } });
+  } });
+  assert.strictEqual((await retry.waitForResult('route-a', 'client', 'j1')).resultId, 'r1');
+  assert.strictEqual(readAttempts, 2, 'transient read retries must not redispatch');
+  for (const status of [401, 403, 409]) {
+    let requests = 0;
+    const fatal = loadApp({ fetchImpl: async () => { requests++; return jsonResponse({ error: 'denied' }, status); } });
+    await assert.rejects(fatal.waitForResult('route-a', 'client', 'j1'), /denied/);
+    assert.strictEqual(requests, 1, 'authority failures must never retry');
+  }
+  const mismatch = loadApp({ fetchImpl: async () => jsonResponse({ hasResult: true, result: { jobId: 'wrong', resultId: 'r2' } }) });
+  await assert.rejects(mismatch.waitForResult('route-a', 'client', 'j1'), /result_job_mismatch/);
+  let outageReads = 0;
+  const outage = loadApp({ fetchImpl: async () => { outageReads++; throw new TypeError('offline'); } });
+  await assert.rejects(outage.waitForResult('route-a', 'client', 'j1'), /offline/);
+  assert.strictEqual(outageReads, 4, 'read retries must be bounded');
+  assert.strictEqual(outage.state.reconnecting, false);
+
+  let pauseBody;
+  const pause = loadApp({ fetchImpl: async (requestPath, options) => {
+    if (options.method === 'POST') {
+      pauseBody = JSON.parse(options.body);
+      return jsonResponse({ ok: false, status: 'leader_conflict' });
+    }
+    return jsonResponse({ ok: true });
+  } });
+  Object.assign(pause.state, {
+    conversations: [configured, { ...configured, conversationId: 'route-b' }],
+    selectedId: 'route-b', activeConversationId: 'route-a', running: true, authenticated: true,
+  });
+  pause.renderStatus();
+  assert.strictEqual(pause.elements.get('conversationSelect').disabled, true);
+  await pause.pauseConversation();
+  assert.strictEqual(pauseBody.conversationId, 'route-a', 'Pause must target the active run, even with a stale selection');
+  assert.strictEqual(pause.state.cancelRequested, false, 'rejected Pause must not claim success');
+  assert.strictEqual(pause.elements.get('runStatus').textContent, 'Needs attention');
+
+  for (const block of ['empty', 'running', 'authentication', 'leader', 'recovering', 'pending', 'active', 'recovery']) {
+    let requests = 0;
+    const guarded = loadApp({ fetchImpl: async () => { requests++; return jsonResponse({ ok: true }); } });
+    guarded.state.conversations = [{ ...configured,
+      hasPendingResult: block === 'pending', activeDispatchHash: block === 'active' ? 'hash' : null,
+      recoveryRequired: block === 'recovery',
+      leaderLease: block === 'leader' ? { clientId: 'other', expiresAt: Date.now() + 15000 } : null,
+    }];
+    guarded.state.authenticated = block !== 'authentication';
+    guarded.state.running = block === 'running';
+    guarded.state.recovering = block === 'recovering';
+    guarded.renderStatus();
+    guarded.elements.get('promptInput').value = block === 'empty' ? '  ' : 'Inspect';
+    await guarded.runSequence(1);
+    assert.strictEqual(requests, 0, `${block}: no arm or dispatch allowed`);
+  }
 
   for (const blockedBy of ['authentication', 'leader', 'running', 'pending_result', 'result_id']) {
     let writes = 0;
