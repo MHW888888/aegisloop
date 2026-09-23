@@ -24,3 +24,9 @@
 
 - Prefer a branch and pull request over direct writes to `main`.
 - Do not merge while required checks are failing.
+- Treat release presentation as part of acceptance, not a later cleanup:
+  - Recapture affected UI screenshots from the shipped code with synthetic data; verify their version, captions, readability, and expanded/minimized states when applicable.
+  - Keep README Current Focus concise and current; link older changes to release notes. Prefer a dynamic release badge over a hardcoded version badge.
+  - Review GitHub About/topics, package description/keywords, and extension description for consistency. Use tags for shipped capabilities, not planned features or unverified model compatibility.
+  - Verify release/download links and state the difference between fixture coverage and live-account testing. Do not expose private routes, credentials, or workspace data in assets.
+  - Read back remote metadata after publishing. Docs-only or topic changes do not require a new runtime version or overwriting an existing release asset.
