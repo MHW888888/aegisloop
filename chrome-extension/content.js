@@ -18,7 +18,7 @@
  *   6. Every stop/pause is either human-confirmed or a pause awaiting you.
  *
  * The ONLY part that breaks on ChatGPT redesigns is the SELECTORS block below.
- * If the loop stalls, turn on debug (top-right of the panel) and watch the
+ * If the loop stalls, turn on debug under Diagnostics and watch the
  * console for whether it finds the composer / send button / message nodes,
  * then adjust SELECTORS. Nothing else should need changing.
  * ============================================================================
@@ -27,7 +27,7 @@
   'use strict';
   if (window.__LE_LOADED__) return;          // guard against double injection
   window.__LE_LOADED__ = true;
-  const CONTENT_VERSION = '0.3.24';
+  const CONTENT_VERSION = '0.3.25';
   const CONTRACT_VERSION = 'le-3.3';
   const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:17380';
   const FAST_POLL_MS = 800;
@@ -44,22 +44,25 @@
   // ----------------------------------------------------------------------------
   // SELECTORS - fix these first if the DOM changes (all have fallbacks)
   // ----------------------------------------------------------------------------
+  function pageElement(selector) {
+    return Array.from(document.querySelectorAll(selector)).find(el => !el.closest('#le-panel')) || null;
+  }
   const SEL = {
     composer() {
-      return document.querySelector('#prompt-textarea')
-          || document.querySelector('form [contenteditable="true"]')
-          || document.querySelector('div[contenteditable="true"]')
-          || document.querySelector('form textarea')
-          || document.querySelector('textarea');
+      return pageElement('#prompt-textarea')
+          || pageElement('form [contenteditable="true"]')
+          || pageElement('div[contenteditable="true"]')
+          || pageElement('form textarea')
+          || pageElement('textarea');
     },
     sendButton() {
-      return document.querySelector('button[data-testid="send-button"]')
-          || document.querySelector('button[aria-label*="Send" i]')
-          || document.querySelector('form button[type="submit"]');
+      return pageElement('button[data-testid="send-button"]')
+          || pageElement('button[aria-label*="Send" i]')
+          || pageElement('form button[type="submit"]');
     },
     stopButton() {
-      return document.querySelector('button[data-testid="stop-button"]')
-          || document.querySelector('button[aria-label*="Stop" i]');
+      return pageElement('button[data-testid="stop-button"]')
+          || pageElement('button[aria-label*="Stop" i]');
     },
     // All message nodes, with role + text + any code blocks rendered inside.
     messages() {
@@ -175,6 +178,7 @@
     missingCodexStableSince: 0,
     needsProtocolFix: false,
     seedSubmitUnconfirmed: false,
+    armPending: false,
     resultDeliveryUnconfirmed: null,
     selectorHealth: null,
     leaderLease: null,
@@ -306,7 +310,7 @@
   ]);
 
   function isWriteOk(r) {
-    return !!(r && r.ok && r.status >= 200 && r.status < 300 && !(r.json && r.json.error));
+    return !!(r && r.ok && r.status >= 200 && r.status < 300 && r.json && r.json.ok === true && !r.json.error);
   }
 
   function surfaceWriteFailure(r, fallback) {
@@ -323,6 +327,10 @@
   async function postControl(pathAndQuery, body) {
     const payload = { ...(body || {}), clientId: LE.clientId };
     const r = await bridge(pathAndQuery, 'POST', payload);
+    if (payload.conversationId && (payload.conversationId !== LE.conversationId || payload.conversationId !== readConversationId())) {
+      scheduleTick(0);
+      return null;
+    }
     if (isWriteOk(r)) {
       LE.lastControlError = null;
       if (r.json && Object.prototype.hasOwnProperty.call(r.json, 'conversationMode')) {
@@ -543,9 +551,6 @@
     for (const m of msgs) if (m.role === 'user') { last = m; count++; }
     return last ? Object.assign({}, last, { count }) : null;
   }
-  function userMsgCount() {
-    return SEL.messages().filter(m => m.role === 'user').length;
-  }
   function isStreaming() { return !!SEL.stopButton(); }
 
   function sigOf(a) {
@@ -697,6 +702,7 @@
   async function waitForFreshReadyCodex(timeoutMs) {
     const t0 = Date.now();
     while (Date.now() - t0 < timeoutMs) {
+      if (LE.userHold || !activeMode()) return null;
       const ready = currentFreshReadyCodex();
       if (ready) return ready;
       await sleep(500);
@@ -776,7 +782,11 @@
 
   function clickSend() {
     const btn = SEL.sendButton();
-    if (btn && !btn.disabled) { btn.click(); return true; }
+    if (btn) {
+      if (btn.disabled) return false;
+      btn.click();
+      return true;
+    }
     const el = SEL.composer();
     if (el) {
       el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
@@ -800,33 +810,32 @@
     const resultMarker = resultId ? resultIdLine(resultId) : null;
     const markerLines = resultMarker ? `${marker}\n${resultMarker}` : marker;
     const outgoing = `${text}\n\n${markerLines}`;
-    let attempted = false;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const before = userMsgCount();
-      if (!setComposerText(outgoing)) {
-        return { ok: false, attempted, msgId, marker, resultMarker };
+    const conversationId = LE.conversationId;
+    const current = () => conversationId === LE.conversationId && conversationId === readConversationId() && !LE.userHold && activeMode();
+    const failed = (reason, attempted = false) => {
+      if (reason && current()) LE.lastControlError = reason;
+      return { ok: false, attempted, msgId, marker, resultMarker };
+    };
+    if (!current()) return failed(null);
+    if (composerText()) return failed('composer_has_draft');
+    if (!setComposerText(outgoing)) return failed('composer_missing');
+    await sleep(150);
+    if (!current()) return failed(null);
+    if (composerText() !== outgoing.trim()) return failed('composer_changed');
+    if (!clickSend()) return failed('send_not_ready');
+    const t0 = Date.now();
+    while (Date.now() - t0 < 12000) {
+      await sleep(500);
+      if (!current()) return failed(null, true);
+      if (recentUserContains(marker) || (resultMarker && recentUserContains(resultMarker))) {
+        // Never clear a new manual draft entered while send confirmation was pending.
+        if (composerText() === outgoing.trim()) clearComposer();
+        log('submit confirmed (aegisloop_msg_id seen)');
+        return { ok: true, attempted: true, msgId, marker, resultMarker };
       }
-      attempted = true;
-      await sleep(150);
-      clickSend();
-      const t0 = Date.now();
-      while (Date.now() - t0 < (attempt === 0 ? 12000 : 8000)) {
-        await sleep(500);
-        const users = SEL.messages().filter(m => m.role === 'user');
-        if (users.length > before) {
-          const lastUser = users[users.length - 1].text || '';
-          if (lastUser.includes(marker) || (resultMarker && lastUser.includes(resultMarker))) {
-            if (composerText()) clearComposer();   // best-effort tidy, not required
-            log('submit confirmed (aegisloop_msg_id seen)');
-            return { ok: true, attempted, msgId, marker, resultMarker };
-          }
-        }
-      }
-      log('submit not confirmed, retrying');
-      clearComposer();
-      await sleep(200);
     }
-    return { ok: false, attempted, msgId, marker, resultMarker };   // honest failure -> caller pauses for human
+    // An absent bubble is not proof that sending failed. Do not blindly send again.
+    return failed('submit_unconfirmed', true);
   }
 
   async function submitToGPT(text) {
@@ -1130,38 +1139,163 @@
   // Panel UI
   // ----------------------------------------------------------------------------
   let panel;
+  const panelView = { collapsed: false, x: null, y: null };
+  function placePanel() {
+    const viewport = window.visualViewport;
+    const left = (viewport ? viewport.offsetLeft : 0) + 8;
+    const top = (viewport ? viewport.offsetTop : 0) + 8;
+    const width = viewport ? viewport.width : innerWidth;
+    const height = viewport ? viewport.height : innerHeight;
+    panel.style.maxWidth = Math.max(0, width - 16) + 'px';
+    panel.style.maxHeight = Math.max(0, height - 16) + 'px';
+    const rect = panel.getBoundingClientRect();
+    const x = Number.isFinite(panelView.x) ? panelView.x : left + width - rect.width - 24;
+    const y = Number.isFinite(panelView.y) ? panelView.y : top + 64;
+    panel.style.left = Math.max(left, Math.min(x, left + width - rect.width - 16)) + 'px';
+    panel.style.top = Math.max(top, Math.min(y, top + height - rect.height - 16)) + 'px';
+  }
+  function savePanelView() {
+    chrome.storage.local.set({ panelView: { ...panelView } }, () => {
+      if (chrome.runtime.lastError) log('panel preferences could not be saved');
+    });
+  }
+  function setPanelCollapsed(collapsed) {
+    panelView.collapsed = collapsed;
+    panel.classList.toggle('le-collapsed', collapsed);
+    const button = panel.querySelector('#le-collapse');
+    button.innerHTML = collapsed ? '&#43;' : '&minus;';
+    button.title = collapsed ? 'Expand panel' : 'Minimize panel (automation continues)';
+    button.setAttribute('aria-label', button.title);
+    button.setAttribute('aria-expanded', String(!collapsed));
+    placePanel();
+  }
+  function bindPanelView() {
+    let edited = false;
+    let drag = null;
+    const handle = panel.querySelector('#le-move');
+    const rememberPosition = () => {
+      const rect = panel.getBoundingClientRect();
+      panelView.x = rect.left;
+      panelView.y = rect.top;
+      savePanelView();
+    };
+    handle.onpointerdown = event => {
+      if (event.button !== 0) return;
+      edited = true;
+      const rect = panel.getBoundingClientRect();
+      drag = { id: event.pointerId, x: event.clientX - rect.left, y: event.clientY - rect.top };
+      handle.setPointerCapture(event.pointerId);
+    };
+    handle.onpointermove = event => {
+      if (!drag || drag.id !== event.pointerId) return;
+      panelView.x = event.clientX - drag.x;
+      panelView.y = event.clientY - drag.y;
+      placePanel();
+    };
+    const finishDrag = () => { if (drag) { drag = null; rememberPosition(); } };
+    handle.onpointerup = finishDrag;
+    handle.onpointercancel = finishDrag;
+    handle.onlostpointercapture = finishDrag;
+    handle.onkeydown = event => {
+      const moves = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      if (!moves[event.key]) return;
+      event.preventDefault();
+      edited = true;
+      const rect = panel.getBoundingClientRect();
+      const step = event.shiftKey ? 40 : 10;
+      panelView.x = rect.left + moves[event.key][0] * step;
+      panelView.y = rect.top + moves[event.key][1] * step;
+      placePanel();
+      rememberPosition();
+    };
+    panel.querySelector('#le-collapse').onclick = () => {
+      edited = true;
+      setPanelCollapsed(!panelView.collapsed);
+      savePanelView();
+    };
+    panel.querySelector('#le-position-reset').onclick = () => {
+      edited = true;
+      panelView.x = panelView.y = null;
+      placePanel();
+      savePanelView();
+    };
+    chrome.storage.local.get(['panelView'], data => {
+      if (chrome.runtime.lastError || edited) return;
+      const saved = data.panelView || {};
+      panelView.x = Number.isFinite(saved.x) ? saved.x : null;
+      panelView.y = Number.isFinite(saved.y) ? saved.y : null;
+      setPanelCollapsed(saved.collapsed === true);
+    });
+    window.addEventListener('resize', placePanel);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', placePanel);
+      window.visualViewport.addEventListener('scroll', placePanel);
+    }
+    new ResizeObserver(placePanel).observe(panel);
+    placePanel();
+  }
   function buildPanel() {
     panel = document.createElement('div');
     panel.id = 'le-panel';
     panel.innerHTML = `
       <style>
-        #le-panel{position:fixed;right:16px;bottom:16px;z-index:2147483647;width:340px;max-height:86vh;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#e6e6e6;background:#15171c;border:1px solid #2a2e37;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden}
-        #le-panel header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#1b1e25;border-bottom:1px solid #2a2e37}
-        #le-panel header b{font-size:12px;letter-spacing:.3px}
-        #le-panel .body{padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(86vh - 42px);overflow:auto}
-        #le-panel .row{display:flex;gap:6px;align-items:center;justify-content:space-between}
+        #le-panel{position:fixed;z-index:2147483647;width:320px;max-height:calc(100dvh - 16px);display:flex;flex-direction:column;font:12px/1.5 system-ui,sans-serif;letter-spacing:0;color:#e6e6e6;background:#15171c;border:1px solid #2a2e37;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.3);overflow:hidden;color-scheme:dark;text-align:left}
+        #le-panel,#le-panel *{box-sizing:border-box}
+        #le-panel [hidden]{display:none!important}
+        #le-panel header{display:flex;align-items:center;gap:4px;padding:4px 6px;background:#1b1e25;border-bottom:1px solid #2a2e37;flex-shrink:0}
+        #le-panel header b{font-size:12px;letter-spacing:0}
+        #le-panel #le-move{flex:1;min-width:0;text-align:left;cursor:move;touch-action:none;user-select:none;background:transparent;border-color:transparent}
+        #le-panel .icon{width:30px;height:30px;padding:0;flex-shrink:0;font-size:18px}
+        #le-panel .body{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;overscroll-behavior:contain}
+        #le-panel .row{display:flex;gap:6px;align-items:center;justify-content:space-between;min-width:0}
+        #le-panel .row>*{min-width:0;overflow-wrap:anywhere}
+        #le-panel .row .k{flex-shrink:0}
         #le-panel .k{color:#8a93a3}
         #le-panel .pill{padding:1px 7px;border-radius:999px;font-size:11px}
         #le-panel input{width:100%;background:#0f1115;border:1px solid #2a2e37;color:#e6e6e6;border-radius:6px;padding:5px 7px}
-        #le-panel textarea{width:100%;height:54px;background:#0f1115;border:1px solid #2a2e37;color:#e6e6e6;border-radius:6px;padding:6px 7px;resize:vertical}
-        #le-panel button{cursor:pointer;border:1px solid #2a2e37;background:#222632;color:#e6e6e6;border-radius:6px;padding:5px 8px;font:inherit}
+        #le-panel textarea{width:100%;min-height:54px;height:54px;max-height:180px;background:#0f1115;border:1px solid #2a2e37;color:#e6e6e6;border-radius:6px;padding:6px 7px;resize:vertical}
+        #le-panel button{cursor:pointer;border:1px solid #2a2e37;background:#222632;color:#e6e6e6;border-radius:6px;padding:5px 8px;font:inherit;min-height:30px;overflow-wrap:anywhere}
+        #le-panel button:focus-visible,#le-panel summary:focus-visible{outline:2px solid #9fd2ff;outline-offset:-2px}
         #le-panel button:hover{background:#2a2f3d}
         #le-panel button:disabled{opacity:.45;cursor:not-allowed}
         #le-panel button:disabled:hover{background:#222632}
         #le-panel button.danger{background:#3a1c1f;border-color:#5a2a2e;color:#ffb4b4}
         #le-panel button.go{background:#16331f;border-color:#2a5a36;color:#b6ffc8}
         #le-panel .muted{color:#8a93a3;font-size:11px}
-        #le-panel .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-        #le-panel .capsule{border:1px solid #2a2e37;border-radius:8px;padding:7px;background:#11141a}
-        #le-panel .steps{margin:6px 0 0 18px;padding:0;color:#cdd4e0}
-        #le-panel .steps li{margin:2px 0}
-        #le-panel .tip{color:#8a93a3;font-size:11px;margin-top:5px}
-        .le-ok{background:#16331f;color:#b6ffc8}.le-warn{background:#3a2f12;color:#ffe39a}.le-bad{background:#3a1c1f;color:#ffb4b4}.le-run{background:#13283a;color:#9fd2ff}
+        #le-panel .grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}
+        #le-panel .capsule{border-top:1px solid #2a2e37;padding:7px 0}
+        #le-panel details{border-top:1px solid #2a2e37;padding-top:6px}
+        #le-panel summary{cursor:pointer;padding:4px 0;font-weight:600}
+        #le-panel .section-content{display:flex;flex-direction:column;gap:8px;padding-top:6px}
+        #le-panel footer{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-top:1px solid #2a2e37;flex-shrink:0;background:#1b1e25;max-height:calc(100dvh - 60px);overflow:auto}
+        #le-panel .compact{display:none;padding:6px 8px;gap:8px;align-items:center;justify-content:space-between}
+        #le-panel.le-collapsed{width:260px}
+        #le-panel.le-collapsed .body,#le-panel.le-collapsed footer{display:none}
+        #le-panel.le-collapsed .compact{display:flex}
+        #le-panel #le-compact-state{min-width:0;overflow-wrap:anywhere}
+        #le-panel .le-ok{background:#16331f;color:#b6ffc8}#le-panel .le-warn{background:#3a2f12;color:#ffe39a}#le-panel .le-bad{background:#3a1c1f;color:#ffb4b4}#le-panel .le-run{background:#13283a;color:#9fd2ff}
       </style>
-      <header><b>AegisLoop <span class="muted" id="le-ver">v${CONTENT_VERSION}</span></b><button id="le-dbg" title="debug log">debug</button></header>
-      <div class="body">
+      <header>
+        <button id="le-move" title="Move panel: drag or use arrow keys" aria-label="Move AegisLoop panel"><b>AegisLoop <span class="muted" id="le-ver">v${CONTENT_VERSION}</span></b></button>
+        <button id="le-position-reset" class="icon" title="Reset panel position" aria-label="Reset panel position">&#8634;</button>
+        <button id="le-collapse" class="icon" title="Minimize panel (automation continues)" aria-label="Minimize panel (automation continues)" aria-expanded="true" aria-controls="le-panel-body le-panel-controls">&minus;</button>
+      </header>
+      <div class="compact"><span id="le-compact-state" class="pill le-warn">Checking</span><button id="le-compact-pause" class="icon" title="Pause automation (current Codex task may finish)" aria-label="Pause automation">&#9208;</button></div>
+      <div class="body" id="le-panel-body">
         <div class="row"><span class="k">Local bridge</span><span id="le-bridge" class="pill le-bad">not running</span></div>
-        <div class="grid"><input id="le-bridge-url" placeholder="http://127.0.0.1:17380" /><button id="le-bridge-save">Save URL</button></div>
+        <div class="row"><span class="k">Mode</span><span id="le-state" class="pill le-run">-</span></div>
+        <div id="le-simple" class="pill le-run">checking...</div>
+        <div id="le-reason" class="muted" role="status"></div>
+        <div id="le-blocked" style="display:none">
+          <div class="pill le-warn">Needs approval</div>
+          <div id="le-blocked-rule" class="muted"></div>
+          <div class="grid" style="margin-top:6px"><button id="le-approve" class="go">Allow once</button><button id="le-skip">Skip</button></div>
+        </div>
+        <label id="le-seed-label" class="muted" for="le-seed">First instruction (optional)</label>
+        <textarea id="le-seed" placeholder="Next local Codex task"></textarea>
+        <button id="le-seed-starter">Use starter text</button>
+        <details id="le-connection"><summary>Connection</summary><div class="section-content">
+        <div class="grid"><input id="le-bridge-url" aria-label="Bridge URL" placeholder="http://127.0.0.1:17380" /><button id="le-bridge-save">Save URL</button></div>
         <div id="le-tokenbox" style="display:none">
           <div class="pill le-warn">Bridge token required</div>
           <input id="le-token" type="password" placeholder="X-AegisLoop-Token" style="margin-top:6px" />
@@ -1170,20 +1304,16 @@
         <div class="row"><span class="k">ChatGPT tab</span><span id="le-conv" class="muted">-</span></div>
         <div class="row"><span class="k">Local Codex session</span><span id="le-sess" class="muted">-</span></div>
         <div class="row"><span class="k">Execution route</span><span class="pill le-ok">AegisLoop local bridge</span></div>
-        <div class="row"><span class="k">Mode</span><span id="le-state" class="pill le-run">-</span></div>
         <div class="row"><span class="k">Tab leader</span><span id="le-leader" class="pill le-warn">checking</span></div>
         <div class="row"><span class="k">Client / lease</span><span id="le-client" class="muted">-</span></div>
-        <div id="le-guide" class="capsule">
-          <div class="row"><span class="k">Start here</span><span class="pill le-run">4 steps</span></div>
-          <ol class="steps">
-            <li>Run <b>npm run doctor</b> locally.</li>
-            <li>Connect this ChatGPT tab to Codex.</li>
-            <li>Generate briefing, then paste GPT brief.</li>
-            <li>Use starter text, then Arm one run.</li>
-          </ol>
-          <div class="tip">Use a dedicated runner thread. Switching GPT models keeps the same Codex route while the ChatGPT conversation URL stays the same.</div>
-          <div class="tip">Built-in Codex is a separate route. For this runner, keep AegisLoop selected and ask the current model for a visible codex JSON block.</div>
+        <div id="le-bindbox" style="display:none">
+          <div class="muted">Connect this ChatGPT tab to a local Codex session.</div>
+          <input id="le-sessin" aria-label="Local Codex session id" placeholder="Local Codex session id (019f...)" />
+          <input id="le-wsin" aria-label="Workspace folder" placeholder="Workspace folder" />
+          <button id="le-bind" class="go" style="width:100%;margin-top:6px">Connect this chat</button>
         </div>
+        </div></details>
+        <details><summary>Briefing</summary><div class="section-content">
         <div id="le-capsule" class="capsule">
           <div class="row"><span class="k">Capsule</span><span id="le-capsule-state" class="pill le-warn">legacy</span></div>
           <div class="row"><span class="k">Project</span><span id="le-cap-project" class="muted">-</span></div>
@@ -1198,37 +1328,28 @@
           <textarea id="le-brief-objective" placeholder="Objective for GPT/Codex briefing"></textarea>
           <div class="grid"><button id="le-brief-generate" class="go">Generate briefing</button><button id="le-brief-copy">Copy GPT brief</button></div>
         </div>
-        <div id="le-reason" class="muted"></div>
-        <div id="le-bindbox" style="display:none">
-          <div class="muted">Connect this ChatGPT tab to a local Codex session.</div>
-          <input id="le-sessin" placeholder="Local Codex session id (019f...)" />
-          <input id="le-wsin" placeholder="Workspace folder, e.g. C:\\my-project" />
-          <button id="le-bind" class="go" style="width:100%;margin-top:6px">Connect this chat</button>
-        </div>
-        <div id="le-blocked" style="display:none">
-          <div class="pill le-warn">Needs approval</div>
-          <div id="le-blocked-rule" class="muted"></div>
-          <div class="grid" style="margin-top:6px"><button id="le-approve" class="go">Allow once</button><button id="le-skip">Skip</button></div>
-        </div>
-        <div id="le-simple" class="pill le-run">checking...</div>
+        </div></details>
+        <details><summary>Diagnostics</summary><div class="section-content">
         <div id="le-selector-health" class="capsule">
           <div class="row"><span class="k">Selector health</span><span id="le-sel-state" class="pill le-warn">checking</span></div>
           <div class="row"><span class="k">Composer / Send / Stop</span><span id="le-sel-controls" class="muted">-</span></div>
           <div class="row"><span class="k">Assistant / User</span><span id="le-sel-counts" class="muted">-</span></div>
           <div class="row"><span class="k">Latest sigs</span><span id="le-sel-sigs" class="muted">-</span></div>
         </div>
-        <div id="le-seed-label" class="muted">First instruction (optional)</div>
-        <textarea id="le-seed" placeholder="Recommended: click Use starter text, then Arm one run."></textarea>
-        <button id="le-seed-starter">Use starter text</button>
+        <button id="le-debug-snapshot">Export Debug Snapshot</button>
+        <button id="le-dbg" aria-pressed="false" title="Debug log">Debug log</button>
+        </div></details>
+      </div>
+      <footer id="le-panel-controls">
         <div class="grid"><button id="le-chat">Chat mode</button><button id="le-send" class="go">Arm one run</button></div>
         <div class="grid"><button id="le-arm-loop" class="go">Arm loop</button><button id="le-freeze">Freeze</button></div>
-        <button id="le-debug-snapshot" style="width:100%">Export Debug Snapshot</button>
         <button id="le-stop" class="danger" style="width:100%">Stop</button>
         <div id="le-confirm" style="display:none"><div class="pill le-bad">Confirm stop?</div><div class="grid" style="margin-top:6px"><button id="le-stop-yes" class="danger">Confirm</button><button id="le-stop-no">Cancel</button></div></div>
-      </div>`;
+      </footer>`;
     document.body.appendChild(panel);
+    bindPanelView();
 
-    panel.querySelector('#le-dbg').onclick = () => { LE.debug = !LE.debug; panel.querySelector('#le-dbg').style.color = LE.debug ? '#b6ffc8' : ''; };
+    panel.querySelector('#le-dbg').onclick = () => { LE.debug = !LE.debug; panel.querySelector('#le-dbg').setAttribute('aria-pressed', String(LE.debug)); panel.querySelector('#le-dbg').style.color = LE.debug ? '#b6ffc8' : ''; };
     panel.querySelector('#le-bridge-save').onclick = async () => {
       let url;
       try {
@@ -1283,39 +1404,50 @@
       alert(ok ? 'GPT brief copied' : 'Copy failed');
     };
     async function armAndMaybeSeed(action) {
-      const seedBox = panel.querySelector('#le-seed');
-      const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action });
-      if (!(mode && mode.json && mode.json.ok)) return;
-      LE.userHold = false;
-      LE.local = 'idle';
-      resetProtocolRecovery();
-      LE.seedSubmitUnconfirmed = false;
-      LE.conversationMode = mode.json.conversationMode || 'armed';
-      LE.loopState = mode.json.loopState || 'running';
-      syncArmState(mode.json);
-      LE.lastSig = sigOf(latestAssistant());
-      const seed = seedBox.value.trim();
-      if (seed) {
-        LE.local = 'awaiting_assistant';
-        const sent = await submitToGPT(seed + '\n' + contractText());
-        if (sent) seedBox.value = '';
-        else {
-          const ready = await waitForFreshReadyCodex(SEED_FRESH_CODEX_CONFIRM_MS);
-          if (ready) {
-            seedBox.value = '';
-            LE.local = 'awaiting_assistant';
-            LE.seedSubmitUnconfirmed = false;
-            log('seed submit not confirmed by user bubble, but fresh turn-token codex block seen');
-            scheduleTick(DOM_NUDGE_MS);
-          } else {
-            LE.local = 'awaiting_assistant';
-            LE.seedSubmitUnconfirmed = true;
-            log('seed submit not confirmed; staying armed until arm TTL or manual Chat Mode');
-            scheduleTick(FAST_POLL_MS);
+      if (LE.armPending) return;
+      LE.armPending = true;
+      renderPanel();
+      const conversationId = LE.conversationId;
+      try {
+        const seedBox = panel.querySelector('#le-seed');
+        const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action });
+        if (!(mode && mode.json && mode.json.ok)) return;
+        LE.userHold = false;
+        LE.local = 'idle';
+        resetProtocolRecovery();
+        LE.seedSubmitUnconfirmed = false;
+        LE.conversationMode = mode.json.conversationMode || 'armed';
+        LE.loopState = mode.json.loopState || 'running';
+        syncArmState(mode.json);
+        LE.lastSig = sigOf(latestAssistant());
+        const seed = seedBox.value.trim();
+        if (seed) {
+          LE.local = 'awaiting_assistant';
+          const sent = await submitToGPT(seed + '\n' + contractText());
+          if (conversationId !== readConversationId() || LE.userHold || !activeMode()) return;
+          if (sent) seedBox.value = '';
+          else if (LE.local === 'awaiting_assistant') {
+            const ready = await waitForFreshReadyCodex(SEED_FRESH_CODEX_CONFIRM_MS);
+            if (conversationId !== readConversationId() || LE.userHold || !activeMode()) return;
+            if (LE.local !== 'awaiting_assistant') return;
+            if (ready) {
+              seedBox.value = '';
+              LE.local = 'awaiting_assistant';
+              LE.seedSubmitUnconfirmed = false;
+              log('seed submit not confirmed by user bubble, but fresh turn-token codex block seen');
+              scheduleTick(DOM_NUDGE_MS);
+            } else {
+              LE.local = 'awaiting_assistant';
+              LE.seedSubmitUnconfirmed = true;
+              log('seed submit not confirmed; staying armed until arm TTL or manual Chat Mode');
+              scheduleTick(FAST_POLL_MS);
+            }
           }
         }
+      } finally {
+        LE.armPending = false;
+        renderPanel();
       }
-      renderPanel();
     }
 
     panel.querySelector('#le-send').onclick = () => armAndMaybeSeed('arm_once');
@@ -1334,6 +1466,7 @@
       }
       renderPanel();
     };
+    panel.querySelector('#le-compact-pause').onclick = () => panel.querySelector('#le-chat').click();
     panel.querySelector('#le-freeze').onclick = async () => {
       const mode = await postControl('/api/mode', { conversationId: LE.conversationId, action: 'freeze' });
       if (mode) {
@@ -1373,6 +1506,9 @@
     if (!$('#le-bridge-url').value) $('#le-bridge-url').value = LE.bridgeUrl || DEFAULT_BRIDGE_URL;
     pill($('#le-bridge'), LE.bridgeOk ? 'le-ok' : 'le-bad', LE.bridgeOk ? 'online' : 'not running');
     $('#le-tokenbox').style.display = LE.authRequired ? 'block' : 'none';
+    const needsConnection = LE.authRequired || (LE.conversationId && !LE.bound && LE.bridgeOk);
+    if (needsConnection && !$('#le-connection').dataset.needsConnection) $('#le-connection').open = true;
+    $('#le-connection').dataset.needsConnection = needsConnection ? 'true' : '';
     $('#le-conv').textContent = LE.conversationId ? LE.conversationId.slice(0, 8) + '...' : '(none)';
     $('#le-sess').textContent = LE.codexSessionId ? LE.codexSessionId.slice(0, 8) + '...' : '-';
     const modeMap = { chat: 'le-ok', armed: 'le-warn', running: 'le-run', review: 'le-run', frozen: 'le-bad' };
@@ -1381,6 +1517,11 @@
       : (LE.conversationMode || 'chat');
     pill($('#le-state'), modeMap[LE.conversationMode] || 'le-run', modeText);
     const leaderOk = isCurrentLeader();
+    const compactProblem = LE.lastControlError || LE.bridgeError || LE.authRequired || LE.blockedPayload || LE.needsProtocolFix || LE.resultDeliveryUnconfirmed;
+    const compactText = !LE.bridgeOk ? 'Bridge offline' : LE.bound && !leaderOk ? 'Not leader'
+      : compactProblem ? 'Needs attention' : !LE.bound ? 'Not connected' : modeText;
+    pill($('#le-compact-state'), compactProblem || !LE.bridgeOk || (LE.bound && !leaderOk) ? 'le-bad' : (modeMap[LE.conversationMode] || 'le-warn'), compactText);
+    $('#le-compact-state').title = LE.lastControlError || LE.bridgeError || compactText;
     const leaseSeconds = Math.ceil(leaderLeaseMsLeft() / 1000);
     if (!LE.bound) pill($('#le-leader'), 'le-warn', 'not connected');
     else pill($('#le-leader'), leaderOk ? 'le-ok' : 'le-bad', leaderOk ? 'leader' : 'not leader');
@@ -1449,6 +1590,9 @@
       const el = $(selector);
       if (el) el.disabled = controlsDisabled;
     });
+    $('#le-compact-pause').disabled = controlsDisabled || !activeMode();
+    $('#le-send').disabled = controlsDisabled || LE.armPending;
+    $('#le-arm-loop').disabled = controlsDisabled || LE.armPending;
   }
 
   // ----------------------------------------------------------------------------

@@ -1,5 +1,17 @@
 # Troubleshooting
 
+## Extension Panel and Draft Safety
+
+- Drag the AegisLoop header to move the panel. With the header focused, arrow keys move it by 10 pixels (Shift: 40). The reset-position icon returns it to the default location. Resizing the browser keeps it inside the visible viewport.
+- The minus icon minimizes the panel; the plus icon restores it. Minimizing does **not** stop execution. The compact status and Pause control remain available; Pause stops automation but does not claim to kill an already running task.
+- Open **Connection** for bridge URL, token, session binding, and leader details; **Briefing** for capsule information; **Diagnostics** for selector health and Export Debug Snapshot. Run controls stay outside the scrolling content area.
+- `composer_has_draft`: the ChatGPT input already contains text. AegisLoop left it untouched. Switch to Chat mode, send or preserve the draft yourself, then arm again.
+- `composer_changed`: the input changed while a send was being prepared. It was not sent automatically. Inspect it before retrying.
+- `composer_missing` or `send_not_ready`: the actual page input or send control is unavailable. Plugin fields are never used as a substitute. Wait for the page to finish loading and inspect Selector health.
+- `submit_unconfirmed`: the send was attempted once but its message identity was not found in recent user bubbles. Do not repeatedly arm. Check the conversation for the existing message first; fresh turn-token detection can still recover a seed, while result delivery uses its pending-result ledger.
+
+To load an updated unpacked build, reload AegisLoop in the browser's extension manager, then refresh the ChatGPT tab. Confirm the visible panel version. Updating files alone does not replace a content script already running in a tab.
+
 ## Console Connection and Run Status
 
 - `Setup required` with `API token is not configured`: configure a local `apiToken` and restart the bridge. Reopening the page alone cannot repair this. Do not disable authentication for normal use.

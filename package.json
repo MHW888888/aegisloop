@@ -1,6 +1,6 @@
 {
   "name": "aegisloop",
-  "version": "0.3.24",
+  "version": "0.3.25",
   "private": false,
   "description": "Local Codex control with bounded runs, crash recovery, and auditable results. Optional ChatGPT bridge.",
   "main": "server.js",
@@ -30,6 +30,7 @@
     "test:unicode": "node scripts/test-unicode-runtime.js",
     "test:ui-security": "node scripts/test-ui-security.js",
     "test:ui:browser": "node scripts/test-ui-browser.js",
+    "test:extension:browser": "node scripts/test-extension-panel-browser.js",
     "issues:stability": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-stability-issues.ps1",
     "issues:model-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-model-smoke-issues.ps1",
     "issues:recruit-testers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-recruitment-issue.ps1",

@@ -57,9 +57,9 @@ assert.match(content, /AegisLoop local bridge/, 'panel must identify the local b
 assert.match(content, /fenced codex JSON block/, 'contract must teach page-text codex block behavior');
 assert.match(content, /tool-availability disclaimer/, 'contract must prevent Pro/reasoning model tool disclaimers');
 assert.match(content, /Pro or reasoning model/, 'starter text must handle Pro/reasoning modes');
-assert.match(content, /Switching GPT models keeps the same Codex route/, 'panel must explain model switching is route-neutral');
-assert.match(content, /Built-in Codex is a separate route/, 'panel must explain built-in Codex coexistence');
-assert.match(content, /keep AegisLoop selected and ask the current model for a visible codex JSON block/, 'panel must keep the route model-independent');
+assert.match(read('docs/model-compatibility.md'), /Model switching is route-neutral/, 'docs must explain model-independent routing');
+assert.match(content, /Connection<\/summary>/, 'connection details must remain available in the compact panel');
+assert.match(content, /Minimize panel \(automation continues\)/, 'minimizing must not imply that execution stopped');
 assert.match(content, /LE\.codexSessionId = me\.codexSessionId \|\| LE\.codexSessionId/, 'panel route display must refresh Codex session id from bridge state');
 assert.match(content, /LE\.workspaceDir = me\.workspaceDir \|\| LE\.workspaceDir/, 'panel route display must refresh workspace from bridge state');
 assert.match(content, /LE\.fullAuto = me\.fullAuto !== false/, 'panel route display must refresh automation flag from bridge state');

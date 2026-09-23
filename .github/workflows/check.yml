@@ -64,3 +64,4 @@ jobs:
       - run: npm install --prefix "$RUNNER_TEMP/aegisloop-browser" --no-package-lock --ignore-scripts playwright@1.62.1
       - run: node "$RUNNER_TEMP/aegisloop-browser/node_modules/playwright/cli.js" install --with-deps chromium
       - run: NODE_PATH="$RUNNER_TEMP/aegisloop-browser/node_modules" npm run test:ui:browser
+      - run: NODE_PATH="$RUNNER_TEMP/aegisloop-browser/node_modules" npm run test:extension:browser

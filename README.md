@@ -47,7 +47,11 @@ Please do not include real conversation IDs, tokens, local private paths, privat
 
 GPT-6 Astra, Sol, and Luna are now included in the model smoke targets. Model selection does not change AegisLoop's conversation binding. This is not a claim that every logged-in ChatGPT model has passed live testing: see [model compatibility](docs/model-compatibility.md) and [positioning and alternatives](docs/positioning.md).
 
-## Current Focus: v0.3.24 Connection and Run Clarity
+## Current Focus: v0.3.25 Compact Panel and Draft Safety
+
+The optional extension panel can now be moved, minimized, and restored without changing run state. Its position and collapsed state persist across reloads; viewport clamping keeps the controls reachable in narrow windows. Connection, briefing, and diagnostics are collapsed by default, with run controls in a separate footer and Pause available in the compact view.
+
+Page selectors exclude the extension's own fields. Sending preserves existing and newly typed manual drafts, uses message identity rather than message counts for confirmation, and never blindly resends an unconfirmed message. Failed control envelopes and responses from a previous conversation cannot update the current panel. The shipped content script now runs in a real browser fixture in CI. See [v0.3.25 release notes](docs/release-notes-v0.3.25.md).
 
 The console locks the selected route and task controls during execution, rejects empty tasks and example bindings, and keeps Pause bound to the active conversation. Brief result-read failures get at most three retries without re-dispatching; authority errors stop immediately. Results must match the accepted job before ACK. Failed or malformed bridge replies no longer count as successful controls, and failure state remains visible after a status refresh.
 
@@ -99,7 +103,7 @@ The existing v0.3 hardening foundation includes:
 - visible non-secret turn tokens so old `codex` blocks cannot be resurrected accidentally;
 - Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief;
 - the extension panel can generate Run Capsule `inbox` briefing files and copy the GPT thread brief;
-- the panel now includes a four-step start guide and a **Use starter text** button for safer first tasks;
+- the compact panel keeps a **Use starter text** button and folds connection, briefing, and diagnostic details away from run controls;
 - Run Capsule runtime path segments preserve Unicode project / branch / run names while still replacing unsafe path characters;
 - the extension now uses adaptive polling: faster checks while a run is active, slower checks while idle, and a DOM-change nudge when ChatGPT posts a new message;
 - macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back, AegisLoop stays armed and waits for a fresh turn-token `codex` block instead of falling back to Chat Mode;
