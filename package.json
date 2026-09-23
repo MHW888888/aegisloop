@@ -3,6 +3,14 @@
   "version": "0.3.25",
   "private": false,
   "description": "Local Codex control with bounded runs, crash recovery, and auditable results. Optional ChatGPT bridge.",
+  "homepage": "https://github.com/MHW888888/aegisloop#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MHW888888/aegisloop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MHW888888/aegisloop/issues"
+  },
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -40,12 +48,17 @@
   },
   "keywords": [
     "codex",
+    "codex-cli",
     "chatgpt",
     "automation",
     "local-first",
     "chrome-extension",
+    "browser-extension",
+    "developer-tools",
     "agentic-workflow",
+    "workflow-automation",
     "crash-recovery",
+    "result-recovery",
     "audit-trail",
     "human-in-the-loop"
   ],

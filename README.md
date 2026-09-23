@@ -1,9 +1,9 @@
 # AegisLoop
 
+[![Latest release](https://img.shields.io/github/v/release/MHW888888/aegisloop)](https://github.com/MHW888888/aegisloop/releases/latest)
+[![Checks and browser fixtures](https://github.com/MHW888888/aegisloop/actions/workflows/check.yml/badge.svg)](https://github.com/MHW888888/aegisloop/actions/workflows/check.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Node check](https://github.com/MHW888888/aegisloop/actions/workflows/check.yml/badge.svg)](https://github.com/MHW888888/aegisloop/actions/workflows/check.yml)
 [![Local-first](https://img.shields.io/badge/local--first-yes-blue)](#safety-model)
-[![Guarded autonomy](https://img.shields.io/badge/guarded-autonomy-purple)](#why-aegisloop)
 
 > **Local Codex control. Bounded runs. Recoverable results.**
 
@@ -57,84 +57,23 @@ GPT-6 Astra, Sol, and Luna are now included in the model smoke targets. Model se
 
 ## Current Focus: v0.3.25 Compact Panel and Draft Safety
 
-The optional extension panel can now be moved, minimized, and restored without changing run state. Its position and collapsed state persist across reloads; viewport clamping keeps the controls reachable in narrow windows. Connection, briefing, and diagnostics are collapsed by default, with run controls in a separate footer and Pause available in the compact view.
+| User concern | Current behavior |
+| --- | --- |
+| The overlay gets in the way | Move or minimize it; position survives reloads and controls stay inside the viewport. Compact mode keeps status and Pause visible. |
+| Automation overwrites a draft | Existing and newly typed drafts are preserved. The extension does not blindly resend an unconfirmed message. |
+| A request fails or the conversation changes | Failed replies and stale route responses cannot pretend a control succeeded in the current panel. |
 
-Page selectors exclude the extension's own fields. Sending preserves existing and newly typed manual drafts, uses message identity rather than message counts for confirmation, and never blindly resends an unconfirmed message. Failed control envelopes and responses from a previous conversation cannot update the current panel. The shipped content script now runs in a real browser fixture in CI. See [v0.3.25 release notes](docs/release-notes-v0.3.25.md).
+The shipped content script is exercised in a real-browser fixture in CI, including narrow-window layouts and result delivery. This is synthetic browser testing, not certification of every live ChatGPT model. See [v0.3.25 release notes](docs/release-notes-v0.3.25.md) for the changes and verification scope.
 
-The console locks the selected route and task controls during execution, rejects empty tasks and example bindings, and keeps Pause bound to the active conversation. Brief result-read failures get at most three retries without re-dispatching; authority errors stop immediately. Results must match the accepted job before ACK. Failed or malformed bridge replies no longer count as successful controls, and failure state remains visible after a status refresh.
+### Recovery and Control Foundation
 
-Desktop and narrow-screen controls have more room, expired sessions get a reconnect link, and a competing tab's lease is visible. The real browser fixture covers execution, a transient 503, Pause, refresh recovery, and 320/390/1280-pixel layouts. No permissions were broadened.
+- **Bounded execution:** explicit arming, dispatch limits, per-turn freshness checks, one tab leader per conversation, and workspace serialization.
+- **Recoverable results:** pending-result locks, idempotent ACK, and a local delivery ledger reduce lost or duplicate delivery. After reload, wait for the previous lease to expire before recovering; recovery does not re-execute the task.
+- **Crash visibility:** persisted job journals turn interrupted work into `recovery_required`. Infrastructure errors do not trigger blind execution retries after possible side effects.
+- **Inspectable execution:** the preferred CLI adapter uses structured JSONL and validates the result envelope. Audit logs redact raw prompts/results by default; Debug Snapshot exports sanitized route and selector state.
+- **Local diagnosis:** `npm run health` checks the bridge; `npm run doctor` checks configuration and installed CLI capabilities. Core checks cover Windows, macOS, and Linux, with separate browser fixtures in CI.
 
-The optional local console and Chrome extension now create a fresh identity for each page instance, including copied tabs and reloads. This prevents copied browser storage from duplicating leader authority. After a console reload, wait for the previous lease to expire (15 seconds by default), then recover the pending result. Recovery never automatically re-executes the task.
-
-Recovery controls check authentication, leader ownership, active execution, and the current result ID. A real Playwright browser fixture now exercises copied storage, leader conflicts, expired sessions, and recovery across refreshes in CI. UI requests remain bounded and status polling remains single-flight.
-
-The console remains a same-origin, token-safe surface for bounded one-shot and loop runs. It keeps server-side dispatch caps, exact turn-token checks, leader leases, pending-result recovery, and an explicit distinction between prompt guidance and enforced Codex sandbox policy. The Chrome extension route remains supported.
-
-The structured executor and Codex App Server capability guard remain the execution foundation. `npm run doctor` now also reports whether the installed Codex CLI exposes App Server daemon and proxy commands, without enabling that future adapter automatically.
-
-Version `v0.3.20` keeps the structured executor, crash recovery, and one-command health diagnosis from `v0.3.19`, while making the future Codex App Server boundary easier to verify before migration.
-
-`npm run doctor` now distinguishes basic App Server availability from the capabilities AegisLoop will actually require: version-matched JSON Schema generation, the stable local `stdio://` transport, and optional WebSocket authentication support. AegisLoop does not switch to the experimental WebSocket transport automatically.
-
-First-line bridge diagnosis remains one command:
-
-```powershell
-npm run health
-```
-
-The command distinguishes a missing or invalid config, an offline bridge, and a port occupied by a different service. When the bridge is healthy, it tells the user that the browser extension can retry.
-
-The underlying control layer still provides:
-
-- the preferred CLI adapter uses `codex exec resume --json --output-schema` and validates a stable result envelope;
-- capability detection selects the structured adapter before execution, with a legacy adapter only for older compatible CLIs;
-- every accepted execution gets a persistent local job journal;
-- bridge restarts turn interrupted work into `recovery_required` instead of leaving a permanent busy lock or replaying the task;
-- infrastructure failures are no longer retried blindly after possible file, command, or MCP side effects;
-- result reads now require the same tab leader lease as dispatch and ACK/NACK;
-- root and Run Capsule `AGENTS.md` files keep durable execution rules close to Codex;
-- `npm run doctor` reports Codex version, structured CLI flags, App Server schema/transport capabilities, and the selected adapter.
-
-The [Codex coexistence guide](docs/codex-coexistence.md) still explains when to use built-in Codex and when AegisLoop is useful. The next architecture step is an App Server policy proxy, not more prompt-only routing; see [the App Server roadmap](docs/app-server-roadmap.md).
-
-The existing v0.3 hardening foundation includes:
-
-- startup config schema validation, so bad `config.json` values fail fast with clear errors;
-- Windows, macOS, and Linux CI checks for the core bridge, unit, and recovery fixtures;
-- `X-AegisLoop-Token` auth for the extension and CLI, plus a same-origin `HttpOnly` session for the local UI;
-- explicit result `ACK` / `NACK`, so Codex results are not lost if ChatGPT insertion fails;
-- clearer package, extension, and protocol version reporting;
-- Run Capsule project / branch / run / mode shown in the extension panel;
-- default Chat Mode, so normal Q&A is not interpreted as automation;
-- explicit Arm one run / Arm loop buttons;
-- visible non-secret turn tokens so old `codex` blocks cannot be resurrected accidentally;
-- Dual Briefing templates separate the short ChatGPT planner brief from the detailed local Codex executor brief;
-- the extension panel can generate Run Capsule `inbox` briefing files and copy the GPT thread brief;
-- the compact panel keeps a **Use starter text** button and folds connection, briefing, and diagnostic details away from run controls;
-- Run Capsule runtime path segments preserve Unicode project / branch / run names while still replacing unsafe path characters;
-- the extension now uses adaptive polling: faster checks while a run is active, slower checks while idle, and a DOM-change nudge when ChatGPT posts a new message;
-- macOS / Windows Chrome seed confirmation is more tolerant: if the user-message bubble cannot be read back, AegisLoop stays armed and waits for a fresh turn-token `codex` block instead of falling back to Chat Mode;
-- bridge requests now time out cleanly instead of leaving the panel stuck in a forever-ticking state;
-- switching between ChatGPT conversation URLs resets transient route state and baselines the new thread before automation resumes;
-- unacknowledged Codex results block new dispatches, so a pending result cannot be overwritten;
-- successful results become hard duplicates only after ACK; failed results can be retried with a fresh turn token;
-- Codex timeout cleanup kills the process tree and stdout/stderr are bounded with ring buffers;
-- debug mode shows selector health for composer, send/stop controls, and latest message signatures;
-- `/api/*` calls now reject unexpected browser origins while still allowing ChatGPT pages, Chrome extension requests, and no-origin localhost CLI checks;
-- CI includes a no-login ChatGPT DOM fixture check for the message-role, composer, send/stop, and rendered `codex` block assumptions;
-- each ChatGPT tab gets a local `clientId`, and the bridge gives one active tab a short leader lease per conversation so duplicate tabs cannot both arm, dispatch, ACK, or NACK the same route;
-- Codex results now carry a stable `resultId`, making result ACK idempotent and preventing page refreshes from inserting the same result twice;
-- ChatGPT submit confirmation uses a unique `aegisloop_msg_id` line instead of weak text-prefix matching;
-- API request bodies are capped, dispatch checks require structured `armId` + `turnNonce` fields, audit logs redact raw prompts/results by default, and corrupt `state.json` files can recover from `.bak` instead of silently resetting.
-- result delivery now uses a three-step local ledger (`delivery_attempted`, `dom_confirmed`, `ack_sent`) so a page refresh or delayed DOM confirmation does not blindly insert the same result again;
-- the panel shows whether the current tab is the active leader, displays the local client id and lease countdown, and disables execution controls in duplicate tabs;
-- control writes now check bridge responses before mutating local UI state, surfacing `leader_conflict`, `auth_required`, `origin_not_allowed`, `bridge_timeout`, and `pending_result_exists` instead of silently drifting;
-- no-login real-browser recovery fixtures cover slow result recovery, duplicate suppression, leader conflicts, auth failures, and bridge timeout classification.
-- no-codex recovery now waits for the assistant text to stop streaming and stay stable before sending a protocol repair nudge;
-- the panel can export a sanitized Debug Snapshot with version, route hash, leader state, selector health, local state, and error metadata;
-- each arm creates an `armId` and per-turn `turnNonce`; turn tokens are single-use, rotate after accepted loop dispatches, and are logged only as hashes;
-- CI includes a deterministic real-loop replay fixture and a state-machine test for dispatch, ACK/NACK, pending result, leader, turn token, and protocol-fix invariants.
+The App Server policy proxy is a [roadmap item](docs/app-server-roadmap.md), not the current executor. See [Codex coexistence](docs/codex-coexistence.md) for the native-versus-bridge choice and [release history](https://github.com/MHW888888/aegisloop/releases) for earlier changes.
 
 `/health` stays public for local checks. Bridge APIs under `/api/*` are fail-closed unless you configure `apiToken`, or explicitly set `AEGISLOOP_ALLOW_NO_TOKEN=1` for a throwaway local test. The configured token remains server-side when using `/ui/`.
 
