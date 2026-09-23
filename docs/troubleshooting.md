@@ -2,6 +2,8 @@
 
 ## Console Connection and Run Status
 
+- `Setup required` with `API token is not configured`: configure a local `apiToken` and restart the bridge. Reopening the page alone cannot repair this. Do not disable authentication for normal use.
+
 - `Session expired`: use **Reconnect session** to reload the local `/ui/` surface and obtain a new same-origin session. Reload creates a new tab identity; the previous lease may take 15 seconds to expire.
 - `Reconnecting`: the console is retrying a result read, not dispatching the task again. After three failed retries, the transcript retains the error. Restore the bridge, refresh status, then recover any pending result.
 - `Needs attention`: the last run or control failed. Inspect the displayed error and transcript; a successful health check does not mean the failed action succeeded. A fresh run or changing routes clears the old local error.

@@ -179,6 +179,19 @@ async function main() {
   assert.strictEqual(expiredSession.elements.get('runLoopBtn').disabled, true);
   assert.strictEqual(expiredSession.elements.get('runStatus').textContent, 'Session expired');
 
+  let setupReads = 0;
+  const setup = loadApp({ fetchImpl: async () => { setupReads++; return jsonResponse({ ok: true, uiSessionAvailable: false }); } });
+  assert.strictEqual(await setup.refreshStatus(), false);
+  assert.strictEqual(setupReads, 1, 'unconfigured token must stop before authenticated API reads');
+  assert.strictEqual(setup.elements.get('runStatus').textContent, 'Setup required');
+  assert.strictEqual(setup.elements.get('bridgeStatus').textContent, 'Bridge online');
+  assert.strictEqual(setup.elements.get('reconnectLink').hidden, true, 'reload cannot fix missing configuration');
+  const unauthorized = loadApp({ fetchImpl: async () => jsonResponse({ error: 'unauthorized' }, 401) });
+  await unauthorized.refreshStatus();
+  unauthorized.renderStatus();
+  assert.strictEqual(unauthorized.elements.get('runStatus').textContent, 'Session expired');
+  assert.strictEqual(unauthorized.elements.get('reconnectLink').hidden, false);
+
   const conflict = loadApp({
     fetchImpl: async () => jsonResponse({ ok: false, status: 'leader_conflict' }, 409),
   });

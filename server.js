@@ -1690,6 +1690,7 @@ const server = http.createServer(async (request, response) => {
         ok: true,
         service: 'aegisloop-bridge',
         port: PORT,
+        uiSessionAvailable: Boolean(API_TOKEN || ALLOW_NO_TOKEN),
         conversations: Object.keys(STATE.conversations).length,
       });
     }

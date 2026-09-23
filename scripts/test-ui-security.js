@@ -146,6 +146,10 @@ async function main() {
 
     assert(sessionCookie, 'UI navigation did not issue an HttpOnly session');
 
+    const publicHealth = await (await fetch(`${base}/health`)).json();
+    assert.strictEqual(publicHealth.uiSessionAvailable, true, 'configured token should permit issuing UI sessions');
+    assert(!JSON.stringify(publicHealth).includes(token), 'health capability flag must not reveal token');
+
     const noSession = await fetch(`${base}/api/conversations`);
     assert.strictEqual(noSession.status, 401);
 

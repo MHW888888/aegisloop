@@ -7,6 +7,7 @@
 - Retry transient result reads at most three times. Never replay dispatch or ACK automatically. Stop immediately on authentication or leader conflicts.
 - Match result job identity before acknowledging. Reject malformed JSON, failed response envelopes, and missing control acknowledgements.
 - Keep failed execution/control status visible instead of overwriting it with Ready. Add a session reconnect link and a competing-tab lease countdown.
+- Distinguish missing token configuration from an expired UI session using a non-secret health capability flag. Authentication remains fail-closed.
 - Give run controls adequate width on desktop and mobile; distinguish same-name workspaces with a short conversation identifier.
 
 ## Model Compatibility and Positioning

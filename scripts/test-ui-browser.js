@@ -16,6 +16,7 @@ async function main() {
     hasPendingResult: true, pendingResultId: result.resultId, leaderLease: null,
   };
   let authenticated = true;
+  let uiSessionAvailable = true;
   let ackCount = 0;
   let dispatchCount = 0;
   let resultReadFailures = 0;
@@ -35,7 +36,7 @@ async function main() {
       res.end(fs.readFileSync(path.join(ROOT, 'ui', files[url.pathname])));
       return;
     }
-    if (url.pathname === '/health') return json(200, { ok: true });
+    if (url.pathname === '/health') return json(200, { ok: true, uiSessionAvailable });
     if (!authenticated) return json(401, { error: 'auth_required' });
     if (url.pathname === '/api/conversations') return json(200, { conversations: [conversation, secondConversation] });
     let body = '';
@@ -182,6 +183,12 @@ async function main() {
         await page.screenshot({ path: path.join(process.env.AEGISLOOP_SCREENSHOT_DIR, `console-${viewport.width}.png`), fullPage: true });
       }
     }
+    uiSessionAvailable = false;
+    await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('runStatus').textContent === 'Setup required');
+    assert.equal(await page.locator('#bridgeStatus').textContent(), 'Bridge online');
+    assert.equal(await page.locator('#runBtn').isDisabled(), true);
+    assert.equal(await page.locator('#reconnectLink').isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(`UI browser recovery checks passed (${process.env.AEGISLOOP_TEST_BROWSER || 'chromium'} ${browser.version()})`);
   } finally {

@@ -234,6 +234,12 @@ function leaderAvailable(conversation) {
     || lease.clientId === clientIdFor();
 }
 
+function connectionFailureLabel() {
+  if (state.bridgeError === 'api_token_not_configured') return 'Setup required';
+  if (/unauthorized|auth_required|Session expired/i.test(state.bridgeError)) return 'Session expired';
+  return state.bridgeError === 'bridge_timeout' ? 'Bridge timeout' : 'Unavailable';
+}
+
 function renderStatus() {
   const c = selectedConversation();
   const locked = state.running || state.recovering || state.pausing;
@@ -242,8 +248,9 @@ function renderStatus() {
   for (const button of document.querySelectorAll('.template')) button.disabled = locked;
   $('pauseBtn').disabled = !c || !state.authenticated || !leaderAvailable(c) || state.pausing || state.recovering;
   $('pauseBtn').textContent = state.pausing ? 'Pausing...' : 'Pause';
-  $('connectionDetail').textContent = state.bridgeError || state.runError || '';
-  $('reconnectLink').hidden = !/auth_required|Session expired/i.test(state.bridgeError);
+  $('connectionDetail').textContent = state.bridgeError === 'api_token_not_configured'
+    ? 'API token is not configured.' : state.bridgeError || state.runError || '';
+  $('reconnectLink').hidden = !/unauthorized|auth_required|Session expired/i.test(state.bridgeError);
   if (!c) {
     $('modeText').textContent = '-';
     $('turnText').textContent = '-';
@@ -252,7 +259,7 @@ function renderStatus() {
     $('capsuleText').textContent = '-';
     $('sandboxText').textContent = '-';
     $('workspacePath').textContent = 'No registered AegisLoop conversation.';
-    setPill($('runStatus'), 'warn', state.authenticated ? 'No workspace' : 'Unavailable');
+    setPill($('runStatus'), 'warn', state.authenticated ? 'No workspace' : connectionFailureLabel());
     if (!state.bridgeError) $('connectionDetail').textContent = 'No configured conversation binding.';
     $('runBtn').disabled = true;
     $('runLoopBtn').disabled = true;
@@ -283,8 +290,7 @@ function renderStatus() {
 
   const canLead = leaderAvailable(c);
   if (!state.authenticated) {
-    setPill($('runStatus'), 'bad', /auth_required|Session expired/i.test(state.bridgeError) ? 'Session expired'
-      : state.bridgeError === 'bridge_timeout' ? 'Bridge timeout' : 'Unavailable');
+    setPill($('runStatus'), 'bad', connectionFailureLabel());
   } else if (state.reconnecting) {
     setPill($('runStatus'), 'warn', 'Reconnecting');
   } else if (state.runError) {
@@ -343,6 +349,7 @@ async function refreshStatus(quiet = false) {
   try {
     const health = await api('/health');
     setPill($('bridgeStatus'), health.ok ? 'ok' : 'bad', health.ok ? 'Bridge online' : 'Bridge offline');
+    if (health.uiSessionAvailable === false) throw new Error('api_token_not_configured');
     const data = await api('/api/conversations');
     if (!Array.isArray(data.conversations)) throw new Error('invalid_bridge_response');
     state.authenticated = true;
@@ -370,14 +377,9 @@ async function refreshStatus(quiet = false) {
   } catch (error) {
     state.authenticated = false;
     state.bridgeError = error.message;
-    setPill($('bridgeStatus'), 'bad', 'Bridge error');
+    if (error.message !== 'api_token_not_configured') setPill($('bridgeStatus'), 'bad', 'Bridge error');
     renderStatus();
-    const failureLabel = error.code === 'bridge_timeout'
-      ? 'Bridge timeout'
-      : error.status === 401
-        ? 'Session expired'
-        : 'Unavailable';
-    setPill($('runStatus'), 'bad', failureLabel);
+    setPill($('runStatus'), 'bad', connectionFailureLabel());
     if (!quiet) log(`Refresh failed: ${error.message}`);
     return false;
   } finally {
